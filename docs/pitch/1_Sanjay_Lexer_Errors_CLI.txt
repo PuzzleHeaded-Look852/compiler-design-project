@@ -1,0 +1,144 @@
+LUMEN PITCH SCRIPT 1 OF 5
+SANJAY SURESH (24BCE2685): OPENING + LEXER, ERROR MESSAGES, COMMAND LINE
+Speaking time: about 4 minutes. You open the whole presentation, so you also say the first few slides.
+Slides you speak on: 1 (title), 2 (two bugs), 3 (the idea), 5 (seven phases), then your own part.
+
+------------------------------------------------------------
+READ THIS FIRST: WHAT THE PROJECT IS (even if you did nothing)
+------------------------------------------------------------
+Lumen is a small programming language we built, plus the compiler for it. In most languages a number is just a
+number: 9.8 could be metres, seconds or dollars, and the computer cannot tell. In Lumen a number carries its unit:
+"9.8 m/s^2" or "12.5 lbf*s" or "250 USD". The compiler checks the units the way a physics teacher checks your
+working: you cannot add metres to seconds, and if you pass pound-force-seconds where newton-seconds are needed, it
+either converts correctly or refuses to compile. After the check, the units are thrown away, so the program that
+actually runs is plain arithmetic.
+
+Why it matters: in 1999 NASA lost the Mars Climate Orbiter ($327.6 million) because one program gave a number in
+pound-force seconds and another read it as newton-seconds, a factor of 4.45. In 1983 an Air Canada plane ran out of
+fuel because 1.77 (pounds per litre) was used as if it were kg per litre. To an ordinary compiler those numbers are
+just "float", so nothing could warn anyone. In Lumen both mistakes are compile errors.
+
+The compiler is a pipeline of seven phases, each in its own file:
+  lexer -> parser -> unit checker -> intermediate code (IR) -> optimizer -> bytecode -> virtual machine (VM)
+You own the very first phase (the lexer) and also the part that talks to the user: error messages and the command
+line. Everything below is in your files: lexer.py, tokens.py, errors.py, cli.py, compiler.py (about 590 lines).
+
+------------------------------------------------------------
+THE SCRIPT (say this, in your own words if you like)
+------------------------------------------------------------
+[SLIDE 1]
+"Good morning sir/madam. We are team Lumen: Sanjay Suresh, Sugesh Kumar, Noel Ninan, Advaith Sivakumar and Ajay
+Kumar. Lumen is a programming language in which every number knows its unit, and this is the compiler we built for
+it for Compiler Design."
+
+[SLIDE 2]
+"Why build it? Two real disasters. In 1999 NASA's Mars Climate Orbiter was lost, $327.6 million, because ground
+software produced thruster impulse in pound-force seconds and the navigation software expected newton-seconds. That
+is a factor of 4.45. In 1983 an Air Canada Boeing 767 ran out of fuel at 41,000 feet because the crew used 1.77,
+which is pounds per litre, where kilograms per litre was needed. They loaded less than half the fuel they needed.
+In both cases, to the compiler those numbers were just 'float', so nothing could notice."
+
+[SLIDE 3]
+"Our idea is that the unit is part of the number's type. 9.8 metres per second squared and 12.5 pound-force seconds
+are different kinds of value. The compiler does the physics: multiplying adds the unit exponents, dividing
+subtracts them, and adding needs equal units. Once the check is done, the units are erased, so the running program
+is plain arithmetic and costs nothing at run time."
+
+[SLIDE 5]
+"The compiler has seven phases: lexer, parser, unit checker, intermediate code, optimizer, bytecode generator and a
+virtual machine. The first three, in blue, understand the program and its units. After that it is just numbers. I
+will cover the first phase, the lexer, and how the compiler reports problems. My teammates will take the rest."
+
+[YOUR PART: LEXER]
+"The lexer reads the source text one character at a time and groups the characters into tokens, which are the words
+of the language. Take the line 'let g = 9.8 m/s^2;'. The lexer produces: LET, IDENT g, ASSIGN, FLOAT 9.8, IDENT m,
+SLASH, IDENT s, CARET, INT 2, SEMI. Every token remembers its line and column, so that later phases can point at
+the exact spot when something is wrong."
+
+"Three design points. First, longest match: if the text says '<=', that is one token, not '<' followed by '='.
+Second, numbers are stored as exact fractions, not floating point, so 0.1 is exactly one tenth. That matters
+because unit conversion factors like 1609.344 metres per mile must not drift. Third, the lexer deliberately does
+NOT decide whether a name is a unit. In '9.8 m/s^2' it just sees names and symbols. The parser, which Advaith will
+explain, decides that a name right after a number is a unit."
+
+[YOUR PART: ERRORS]
+"Errors do not stop the lexer. It records each one and keeps going, so one run reports all of them."
+[DEMO 1: run the command below. It shows three lexical errors at once.]
+"Here is a program with three mistakes: an illegal character '@', a string that is never closed, and a malformed
+number '3.'. The compiler reports all three, each with the line, a caret under the exact spot, and where possible a
+help line suggesting the fix. And it never shows a Python crash. Whatever bad input you type, you get a message."
+
+"Every phase reports problems the same way, through one record called a Diagnostic: severity, message, line,
+column, length of the underline, a help line, and which phase raised it. The file errors.py turns that into the
+friendly text you just saw."
+
+[YOUR PART: COMMAND LINE]
+"The command line is 'python -m lumen run file.lum' to compile and run, or 'check' to compile only. Flags such as
+--tokens, --ast, --ir, --ir-opt and --bytecode stop after that phase and print its output, which is how we show
+each phase live. The exit code tells scripts what happened: 0 ran fine, 1 compile error, 2 file could not be read,
+3 runtime error."
+
+"The driver, compiler.py, runs the phases in order and has stop rules. Lexical errors are reported alone, because
+a damaged token stream only produces confusing follow-on errors. Syntax errors stop before the unit checker.
+Warnings are hidden when there are errors."
+
+[HAND OVER]
+"That is how the compiler reads the program and talks back. Advaith will now show how the tokens become a tree."
+
+------------------------------------------------------------
+LIVE DEMO COMMANDS (run from the lumen-compiler folder, after: export PYTHONPATH=src)
+------------------------------------------------------------
+1) python -m lumen run examples/phases_demo.lum --tokens
+   Shows the token list with line:column for each token.
+2) python -m lumen run examples/err_lexical.lum
+   Real output: three errors, for example
+     err_lexical.lum:2:15: error: unexpected character '@'
+     err_lexical.lum:3:13: error: unterminated string   (help: add a closing " before the end of the line)
+     err_lexical.lum:4:13: error: malformed number '3.'
+3) echo $?
+   Prints 1 (compile error). Run 'python -m lumen run examples/fact.lum; echo $?' to see 0.
+Or open the web playground (double-click run_playground.command), pick "Error: lexical" and press Run.
+
+------------------------------------------------------------
+IF YOU ONLY REMEMBER FIVE THINGS
+------------------------------------------------------------
+1. Lexer = turns characters into tokens, each with line and column.
+2. Longest match wins ('<=' is one token). Numbers are exact fractions so 0.1 is really 1/10.
+3. The lexer does not know about units. The parser does.
+4. Errors are collected, not thrown, so one run shows many. Never a Python crash.
+5. Exit codes: 0 ok, 1 compile error, 2 bad file, 3 runtime error.
+
+------------------------------------------------------------
+QUESTIONS THE PROFESSOR MAY ASK, AND SHORT ANSWERS
+------------------------------------------------------------
+Q: Why a hand-written lexer and not lex/flex?
+A: The language is small, and units need some context-sensitive decisions. A hand-written scanner is a hand-coded
+   finite automaton, so every line is explainable, and we get exact control over error messages.
+
+Q: Why are numbers stored as fractions?
+A: So conversions are exact. 1 mile = 1609.344 m is stored as an exact fraction and only rounded once, when printed
+   or turned into a float at the very end. Floats everywhere would accumulate error.
+
+Q: What does the lexer do with a unit like m/s^2?
+A: It does not treat it as a unit. It emits IDENT m, SLASH, IDENT s, CARET, INT 2. The parser decides.
+
+Q: Why are lexical errors reported on their own, without syntax errors?
+A: If a character is illegal the token stream is damaged, and parsing it would only create misleading follow-on
+   errors. So we stop and report the real problem first.
+
+Q: How does the compiler know the line and column of an error?
+A: Every token stores its line and column when the lexer creates it, and every AST node keeps its tokens' positions.
+
+Q: What if the file does not exist?
+A: The CLI prints a message and exits with code 2. It never crashes.
+
+Q: What is a Diagnostic?
+A: One problem report: severity (error or warning), message, line, column, underline length, optional help text,
+   and the phase that found it.
+
+------------------------------------------------------------
+NUMBERS TO KNOW
+------------------------------------------------------------
+7 phases | 3,437 lines of Python in total | 187 tests | 34 example programs | lexer.py is about 194 lines | 12 lexer tests
+Honest limit to say if asked: Lumen checks one program at a time. Mars crossed two programs, so Lumen catches it where
+data enters with a declared unit (a bare number is rejected), but it cannot stop a person from writing the wrong unit.

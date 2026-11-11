@@ -1,0 +1,7 @@
+exit code: 0
+--- stdout ---
+3000.0 N
+3.0 kN
+674.4268293 lbf
+below the limit
+--- stderr ---

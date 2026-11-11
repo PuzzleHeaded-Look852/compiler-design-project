@@ -1,0 +1,6 @@
+exit code: 0
+--- stdout ---
+468750.0 J
+468.75 kJ
+90.0 km/h
+--- stderr ---

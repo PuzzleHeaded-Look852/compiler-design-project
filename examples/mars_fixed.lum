@@ -1,0 +1,12 @@
+// MARS CLIMATE ORBITER, fixed: the unit travels with the number and is converted exactly.
+unit N = 1 kg*m/s^2;
+unit lbf = 4.4482216152605 N;
+
+fn update_trajectory(impulse: N*s) {
+    print(impulse);
+}
+
+fn main() {
+    let from_ground_file = 12.5 lbf*s;    // the data says what it is
+    update_trajectory(from_ground_file);  // compiler inserts the x4.4482216152605 itself
+}

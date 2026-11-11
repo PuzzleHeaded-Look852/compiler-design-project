@@ -1,0 +1,17 @@
+// Newton's second law and unit algebra: kg * m/s^2 is exactly a newton.
+unit N = 1 kg*m/s^2;
+unit kN = 1000 N;
+unit lbf = 4.4482216152605 N;
+
+fn main() {
+    let mass = 1200 kg;
+    let acceleration = 2.5 m/s^2;
+    let force: N = mass * acceleration;
+    print(force);
+    print(force in kN);
+    print(force in lbf);
+    let limit = 5 kN;
+    if (force < limit) {
+        print("below the limit");
+    }
+}

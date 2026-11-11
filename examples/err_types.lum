@@ -1,0 +1,13 @@
+fn half(x: float) -> float { return x / 2.0; }
+
+fn main() {
+    let n: int = 3.7;
+    let b: bool = 1;
+    let s: string = 5;
+    let r = half(true);
+    let u = n && b;
+    if (n) { print(n); }
+    let w = half(1.0, 2.0);
+    let k = nothing(3);
+    let v = 7 % 2.5;
+}

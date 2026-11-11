@@ -1,0 +1,19 @@
+// Drug infusion: mcg/kg/min orders versus a pump that runs in mg/h.
+// Prefixes and time units differ by factors of 1000 and 60: Lumen converts, never confuses.
+unit min = 60 s;
+unit h = 3600 s;
+unit mcg = 1 ug;                       // microgram
+
+fn pump_rate(weight: kg, order: mcg/kg/min) -> mg/h {
+    return weight * order;             // the compiler converts mcg/min -> mg/h
+}
+
+fn main() {
+    let patient = 70 kg;
+    let order = 5 mcg/kg/min;
+    print(pump_rate(patient, order));
+    print(pump_rate(patient, order) in mcg/min);
+    let vial = 200 mg;
+    let hours = vial / pump_rate(patient, order);
+    print(hours in h);
+}

@@ -1,0 +1,12 @@
+exit code: 0
+--- stdout ---
+under the limit
+42.1648128 km
+--- stderr ---
+examples/optimizer_demo.lum:13:9: warning: variable 'scratch' is never used
+   13 |     let scratch = 3 * 4 + 1;         // never used: deleted
+      |         ^~~~~~~
+      = help: remove it, or start the name with '_' to silence this warning
+
+1 warning generated.
+

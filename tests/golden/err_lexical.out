@@ -1,0 +1,28 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/err_lexical.lum:2:15: error: unexpected character '@'
+    2 |     let a = 5 @ 3;
+      |               ^
+
+examples/err_lexical.lum:3:13: error: unterminated string
+    3 |     let s = "never closed;
+      |             ^
+      = help: add a closing " before the end of the line
+
+examples/err_lexical.lum:4:13: error: malformed number '3.'
+    4 |     let x = 3.;
+      |             ^~
+      = help: write digits after the decimal point, e.g. 5.0
+
+examples/err_lexical.lum:5:15: error: unexpected character '&'
+    5 |     let y = 4 & 5;
+      |               ^
+      = help: did you mean '&&' (logical and)?
+
+examples/err_lexical.lum:6:5: error: unterminated block comment
+    6 |     /* a comment that never ends
+      |     ^~
+      = help: close the comment with */
+
+5 errors generated.

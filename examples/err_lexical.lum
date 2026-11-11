@@ -1,0 +1,7 @@
+fn main() {
+    let a = 5 @ 3;
+    let s = "never closed;
+    let x = 3.;
+    let y = 4 & 5;
+    /* a comment that never ends
+}

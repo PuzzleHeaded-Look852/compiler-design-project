@@ -1,0 +1,15 @@
+// Download time: megabits per second vs megabytes. The classic factor-of-8 mistake.
+unit B = 8 bit;
+unit MB = 8000000 bit;
+unit Mbps = 1000000 bit/s;
+
+fn download_time(size: MB, speed: Mbps) -> s {
+    return size / speed;
+}
+
+fn main() {
+    let file = 700 MB;
+    let link = 100 Mbps;
+    print(download_time(file, link));
+    print(download_time(file, link) in s);
+}

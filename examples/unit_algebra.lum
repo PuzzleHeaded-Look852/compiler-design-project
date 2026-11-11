@@ -1,0 +1,19 @@
+// Dimensional analysis done by the compiler.
+unit h = 3600 s;
+unit Hz = 1 s^-1;
+
+fn main() {
+    let distance = 100 m;
+    let time = 9.58 s;
+    print(distance / time);           // speed
+    print(distance / time in km/h);
+    let f = 50 Hz;
+    print(1 / f);                     // a period, in seconds (printed as 1/Hz)
+    print(1 / f in s);
+    let area = 3 m * 4 m;
+    print(area);                      // m^2
+    print(2 km / 500 m);              // units cancel: a plain number
+    print(minimum(3 m, 250 cm));
+    print(maximum(3 m, 250 cm));
+    print(abs(-5 s));
+}

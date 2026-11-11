@@ -1,0 +1,14 @@
+// MARS CLIMATE ORBITER (1999): the bug, rejected at compile time.
+// Ground software produced thruster impulse in pound-force seconds (lbf*s);
+// the navigation software expected newton seconds (N*s). Nobody converted: x4.45 error.
+unit N = 1 kg*m/s^2;
+unit lbf = 4.4482216152605 N;
+
+fn update_trajectory(impulse: N*s) {
+    print(impulse);
+}
+
+fn main() {
+    let from_ground_file = 12.5;          // a bare number: which unit? nobody knows
+    update_trajectory(from_ground_file);  // Lumen refuses to compile this
+}

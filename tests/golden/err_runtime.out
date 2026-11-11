@@ -1,0 +1,6 @@
+exit code: 3
+--- stdout ---
+5
+--- stderr ---
+examples/err_runtime.lum:3: runtime error: division by zero
+    3 |     return a / b;

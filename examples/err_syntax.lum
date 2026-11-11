@@ -1,0 +1,10 @@
+// Several syntax mistakes; the parser recovers after each and reports all of them.
+unit h = 3600 s;
+
+fn main() {
+    let a = 5 m
+    let b = (3 + 4;
+    if (a = 5 m) { print(a); }
+    print(a b);
+    let c = ;
+}

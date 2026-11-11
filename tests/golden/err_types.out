@@ -1,0 +1,44 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/err_types.lum:4:18: error: cannot initialize 'n': expected an int, found a plain number (float)
+    4 |     let n: int = 3.7;
+      |                  ^~~
+      = help: use int(x) to truncate to a whole number
+
+examples/err_types.lum:5:19: error: cannot initialize 'b': expected a bool, found an int
+    5 |     let b: bool = 1;
+      |                   ^
+
+examples/err_types.lum:6:21: error: cannot initialize 's': expected a string, found an int
+    6 |     let s: string = 5;
+      |                     ^
+
+examples/err_types.lum:7:18: error: argument 1 of 'half': expected a plain number (float), found a bool
+    7 |     let r = half(true);
+      |                  ^~~~
+
+examples/err_types.lum:8:15: error: '&&' needs bool operands, found an int
+    8 |     let u = n && b;
+      |               ^~
+
+examples/err_types.lum:9:9: error: the if condition must be bool, found an int
+    9 |     if (n) { print(n); }
+      |         ^
+      = help: compare explicitly, for example `x != 0` or `x > 0`
+
+examples/err_types.lum:10:13: error: function 'half' takes 1 argument but 2 were given
+   10 |     let w = half(1.0, 2.0);
+      |             ^~~~
+      = help: declared as `fn half(x: float)`
+
+examples/err_types.lum:11:13: error: undefined function 'nothing'
+   11 |     let k = nothing(3);
+      |             ^~~~~~~
+
+examples/err_types.lum:12:15: error: '%' works on plain ints only
+   12 |     let v = 7 % 2.5;
+      |               ^
+      = help: use it as in `n % 2` where both sides are int
+
+9 errors generated.

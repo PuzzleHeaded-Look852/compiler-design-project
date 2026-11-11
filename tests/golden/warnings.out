@@ -1,0 +1,16 @@
+exit code: 0
+--- stdout ---
+2.0 m
+--- stderr ---
+examples/warnings.lum:3:9: warning: variable 'unused' is never used
+    3 |     let unused = 5 kg;
+      |         ^~~~~~
+      = help: remove it, or start the name with '_' to silence this warning
+
+examples/warnings.lum:7:5: warning: unreachable code
+    7 |     print("never printed");
+      |     ^
+      = help: the statement before always returns
+
+2 warnings generated.
+

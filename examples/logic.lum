@@ -1,0 +1,12 @@
+// Short-circuit evaluation: the right side of && and || runs only when needed.
+fn loud(x: int) -> bool {
+    print(x);
+    return x > 0;
+}
+
+fn main() {
+    if (loud(0) && loud(1)) { print("both"); }
+    if (loud(2) || loud(3)) { print("first was enough"); }
+    print(!(1 < 2) || 3 == 3);
+    print("done");
+}

@@ -1,0 +1,9 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/mars_bug.lum:13:23: error: argument 1 of 'update_trajectory': expected impulse (N*s), found a plain number (float)
+   13 |     update_trajectory(from_ground_file);  // Lumen refuses to compile this
+      |                       ^~~~~~~~~~~~~~~~
+      = help: if the number really is in N*s, say so: `from_ground_file * 1 N*s`; or write the literal with its unit (e.g. `4 N*s`)
+
+1 error generated.

@@ -1,0 +1,13 @@
+// A road trip: units are checked, mixed units are converted automatically.
+unit min = 60 s;
+unit h = 3600 s;
+
+fn main() {
+    let distance = 12 km;
+    let time = 20 min;
+    let speed = distance / time;          // km/min, derived by the compiler
+    print(speed);
+    print(speed in km/h);                 // explicit conversion
+    let metres: m = distance;             // implicit, same dimension: x1000
+    print(metres);
+}

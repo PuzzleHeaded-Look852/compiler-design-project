@@ -1,0 +1,5 @@
+exit code: 3
+--- stdout ---
+--- stderr ---
+examples/err_recursion.lum:2: runtime error: call stack too deep (more than 5000 nested calls)
+    2 | fn down(n: int) -> int { return down(n + 1); }

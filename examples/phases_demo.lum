@@ -1,0 +1,10 @@
+// The program used in docs/PHASES.md to show every phase's output.
+unit h = 3600 s;
+
+fn main() {
+    let d = 90 km;
+    let t = 1.5 h;
+    let v = d / t;
+    print(v);
+    print(v in m/s);
+}

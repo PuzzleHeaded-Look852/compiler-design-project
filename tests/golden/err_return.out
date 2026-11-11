@@ -1,0 +1,18 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/err_return.lum:1:4: error: function 'sign' may reach its end without returning an int
+    1 | fn sign(x: int) -> int {
+      |    ^~~~
+      = help: make sure every path ends in a `return` statement
+
+examples/err_return.lum:6:23: error: function 'nothing' returns nothing, but this returns a value
+    6 | fn nothing() { return 5; }
+      |                       ^
+      = help: declare a return type: `fn nothing(...) -> int {`
+
+examples/err_return.lum:8:21: error: function 'needs' must return an int
+    8 | fn needs() -> int { return; }
+      |                     ^~~~~~
+
+3 errors generated.

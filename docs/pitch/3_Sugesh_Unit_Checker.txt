@@ -1,0 +1,155 @@
+LUMEN PITCH SCRIPT 3 OF 5
+SUGESH KUMAR (24BCE2687): THE UNIT SYSTEM AND THE TYPE CHECKER (THE HEART OF THE PROJECT)
+Speaking time: about 5 minutes. This is the longest and most important part, so it gets the most time.
+Slides you speak on: 6 (how the checker thinks), 7 (Mars rejected), 8 (Mars fixed), 9 (Gimli), 10 (many errors).
+
+------------------------------------------------------------
+READ THIS FIRST: WHAT THE PROJECT IS (even if you did nothing)
+------------------------------------------------------------
+Lumen is a small programming language we built, plus the compiler for it. In most languages a number is just a
+number: 9.8 could be metres, seconds or dollars. In Lumen a number carries its unit: "9.8 m/s^2", "12.5 lbf*s",
+"250 USD". The compiler checks units like a physics teacher checks working. After the check the units are erased,
+so the program that runs is plain arithmetic.
+
+Why it matters: NASA lost the $327.6 million Mars Climate Orbiter in 1999 because one program gave pound-force
+seconds (lbf*s) and another read newton-seconds (N*s), a factor of 4.45. An Air Canada 767 ran out of fuel in 1983
+because 1.77 (pounds per litre) was used where kilograms per litre was needed. To an ordinary compiler these are
+just "float". In Lumen both are compile errors, and YOUR part is the reason why.
+
+The compiler is a pipeline of seven phases:
+  lexer -> parser -> UNIT CHECKER -> intermediate code -> optimizer -> bytecode -> virtual machine
+Sanjay's lexer makes tokens, Advaith's parser makes a tree. YOUR phase walks that tree and works out the unit of
+every expression. Your files: units.py (about 214 lines) and semantic.py (about 933 lines, the biggest file).
+
+------------------------------------------------------------
+THE SCRIPT (say this, in your own words if you like)
+------------------------------------------------------------
+[HAND-OVER FROM ADVAITH, SLIDE 6]
+"Thank you Advaith. Now we have a tree. My phase, the unit checker, is where the main idea of the project lives. I
+will explain it in three steps: what a unit is to the compiler, the rules, and what happens when a rule is broken."
+
+[STEP 1: WHAT IS A UNIT TO THE COMPILER]
+"A normal type is just int or float. In Lumen the type of a number has three parts: its kind, its dimension and its
+scale. The dimension is the kind of quantity: length, time, speed. I store it as a list of exponents over the base
+units, which are metres, kilograms, seconds and bits. So speed is metres to the power 1 and seconds to the power
+minus 1. A plain number has an empty list, which means dimensionless. The scale says how big the unit is
+compared with the base unit. A kilometre is a length with scale 1000. An hour is a time with scale 3600. Scales are
+exact fractions, so conversions never drift."
+
+[STEP 2: THE RULES. POINT AT THE TABLE ON SLIDE 6]
+"Each operator has one rule on the dimension. Plus and minus need equal dimensions: 1 km + 500 m is fine, because
+the scales differ and the compiler converts the right side to kilometres, giving 1.5 km. But 3 m + 2 s is an
+error, because length and time are different dimensions. Multiply adds the exponents: 3 m times 4 m is 12 m
+squared. Divide subtracts them: 100 m divided by 20 s is 5 m/s. And 2 km divided by 500 m cancels everything and
+gives a plain number, 4. The word 'in' converts explicitly, and only if the dimensions match."
+"Two important points. One: implicit conversion changes the scale only, never the dimension. So kilometres can
+become metres automatically, but length can never become time. Two: a plain number never silently turns into a
+quantity. The only exception is the literal 0, because zero metres and zero seconds are the same zero."
+"The checker works bottom-up. The type of a node is computed from the types of its children, in one post-order walk
+of the tree. In compiler terms this is an S-attributed definition."
+
+[SLIDE 7 AND 8: MARS]
+"Here is the Mars bug written in Lumen. The function update_trajectory wants an impulse in newton-seconds. The
+program passes a bare number, 12.5. The checker refuses: 'expected impulse (N*s), found a plain number'. And look at
+the help line. It tells the programmer how to fix it: write the number with its unit."
+[DEMO 1: mars_bug]
+"On the next slide the programmer writes 12.5 lbf*s. Now the checker sees pound-force seconds and a function that
+wants newton-seconds. They are the same dimension, with different scales, so it inserts a conversion node. The
+program prints 55.6 newton-seconds. That is the factor of 4.45 that Mars needed, applied automatically."
+[DEMO 2: mars_fixed]
+
+[SLIDE 9: GIMLI]
+"Gimli is the same story. Passing 1.77 where kilograms per litre is needed is rejected. Written as 1.77 pounds per
+litre, it converts to 0.803 kilograms per litre, and the fuel on board comes out right."
+
+[SLIDE 10: ERRORS]
+"The checker reports many errors in one run. This program has six unit mistakes: a length where a speed is wanted,
+metres plus seconds, a bare number where a time is needed, converting a length to a time, a misspelt unit, and
+comparing a length with a time. Every message has a line, a caret and a help line. The help is specific: for a
+speed mistake it suggests dividing the length by the time. For a misspelt unit it says 'did you mean m'. That
+suggestion uses edit distance on the unit names."
+"One more design point. When an expression has an error, it is given a special error type, and anything built from
+it stays silent. So one mistake produces one message, not a pile of confusing follow-ups."
+[DEMO 3: err_units]
+
+[ALSO MENTION: THINGS BEYOND UNITS]
+"The checker also does the normal jobs of a type checker: int versus float versus bool versus string, variable
+scope, functions that must return a value, and warnings such as variables that are never used. Money works too:
+'unit INR;' with no value creates a brand-new base dimension, so rupees and dollars can never be added or converted
+by accident."
+
+[HAND OVER]
+"After my phase, every conversion is an explicit node and the units are no longer needed. Noel will show what the
+compiler does with the checked program next."
+
+------------------------------------------------------------
+LIVE DEMO COMMANDS (run from the lumen-compiler folder, after: export PYTHONPATH=src)
+------------------------------------------------------------
+1) python -m lumen run examples/mars_bug.lum
+   Output: error at 13:23, argument 1 of 'update_trajectory': expected impulse (N*s), found a plain number (float),
+   with a help line. Exit code 1.
+2) python -m lumen run examples/mars_fixed.lum
+   Output: 55.60277019 N*s
+3) python -m lumen run examples/err_units.lum
+   Six errors, for example: "cannot add time (s) to length (m)", "unknown unit 'mtr'" with help "did you mean 'm'?",
+   "cannot convert length (m) to time (s)" with help listing the valid length units.
+4) python -m lumen run examples/unit_algebra.lum
+   Output includes 10.43841336 m/s, 37.5782881 km/h, 12.0 m^2, 4.0 (plain number from km / m).
+5) python -m lumen run examples/mars_fixed.lum --units
+   The unit table: m, kg, s, bit, g, N, lbf and so on, with dimension and scale.
+Or use the web playground: pick "Mars Orbiter: the bug" then "Mars Orbiter: fixed", and open the "Typed AST" tab.
+
+------------------------------------------------------------
+IF YOU ONLY REMEMBER FIVE THINGS
+------------------------------------------------------------
+1. Type of a number = (kind, dimension, scale). Dimension is an exponent list over m, kg, s, bit. Scale is an exact fraction.
+2. Plus/minus need equal dimensions. Multiply adds exponents. Divide subtracts them.
+3. Implicit conversion changes scale only (km to m), never dimension (length to time). A plain number never becomes a
+   quantity, except the literal 0.
+4. Bottom-up, one post-order walk (S-attributed). An erroneous expression gets an 'error' type so there is no cascade.
+5. Errors always have a location and usually a help line, and typos get "did you mean".
+
+------------------------------------------------------------
+QUESTIONS THE PROFESSOR MAY ASK, AND SHORT ANSWERS
+------------------------------------------------------------
+Q: Would Lumen really have caught the Mars bug?
+A: Honest answer: where the data enters with a declared type, yes. If the navigation function takes N*s, a bare
+   number from a file is rejected, and the only way through is to write the unit, which makes the assumption visible
+   and reviewable. A checker sees one program, though, and cannot stop a person who writes the wrong unit on purpose.
+
+Q: What exactly is a dimension?
+A: The kind of quantity, stored as exponents over base units. Speed is (m: 1, s: -1). Force is
+   (kg: 1, m: 1, s: -2). Empty means a plain number.
+
+Q: What is a scale?
+A: How many base units one of this unit is. km is 1000 m. h is 3600 s. Stored as an exact fraction.
+
+Q: How is 'unit N = 1 kg*m/s^2;' handled?
+A: A declared unit is a number of another unit expression. The checker works out its dimension and scale from the
+   right-hand side and adds it to the unit table. N is then force with scale 1.
+
+Q: Why does one error not cause many?
+A: A bad expression gets a special error type. Any node built from an error operand stays silent.
+
+Q: Why do rupees and dollars never mix?
+A: 'unit INR;' and 'unit USD;' each create a new base dimension. Different base units give different dimensions,
+   so adding or converting them is a dimension error unless the program does it explicitly with a rate.
+
+Q: Why is there no degrees Celsius?
+A: Celsius has an offset (0 C is not 0 K). Our scale-only conversions cannot express that. Handling it needs separate
+   "point" and "difference" types. We list it as future work.
+
+Q: Torque and energy have the same dimension. Can Lumen tell them apart?
+A: No. It tracks dimensions, not kinds of quantity. That is a known limit.
+
+Q: Where does the conversion actually get inserted?
+A: In semantic.py, the methods coerce, convert and unify insert a Convert node when two values have the same
+   dimension but different scale. The Convert node holds the exact from-scale and to-scale.
+
+------------------------------------------------------------
+NUMBERS TO KNOW
+------------------------------------------------------------
+units.py about 214 lines, semantic.py about 933 lines | 63 checker tests, 7 unit-algebra tests | 6 errors found in err_units
+Conversion example: 12.5 lbf*s x 4.4482216152605 = 55.60277019 N*s. Km/h to m/s is a factor of 5/18.
+Where to look in the code if asked to show it: units.py has dim_mul, dim_div, dim_pow (the exponent algebra) and
+UnitTable. semantic.py has class Checker with x_Binary (the operator rules), coerce and convert.

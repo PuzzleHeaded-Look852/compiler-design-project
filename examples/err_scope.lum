@@ -1,0 +1,11 @@
+fn main() {
+    let a = 1;
+    let a = 2;
+    print(b);
+    {
+        let inner = 5;
+    }
+    print(inner);
+    c = 3;
+    let m = 4;
+}

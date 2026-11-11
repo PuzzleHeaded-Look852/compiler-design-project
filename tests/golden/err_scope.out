@@ -1,0 +1,24 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/err_scope.lum:3:9: error: 'a' is already declared in this scope
+    3 |     let a = 2;
+      |         ^
+      = help: first declared at line 2
+
+examples/err_scope.lum:4:11: error: undefined variable 'b'
+    4 |     print(b);
+      |           ^
+      = help: did you mean 'a'?
+
+examples/err_scope.lum:8:11: error: undefined variable 'inner'
+    8 |     print(inner);
+      |           ^~~~~
+      = help: declare it first with `let`
+
+examples/err_scope.lum:9:5: error: undefined variable 'c'
+    9 |     c = 3;
+      |     ^
+      = help: did you mean 'a'?
+
+4 errors generated.

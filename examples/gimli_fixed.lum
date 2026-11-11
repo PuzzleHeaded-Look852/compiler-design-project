@@ -1,0 +1,16 @@
+// GIMLI GLIDER, fixed: 1.77 lb/L is converted to 0.803 kg/L automatically.
+unit L = 0.001 m^3;
+unit lb = 0.45359237 kg;
+
+fn fuel_mass(volume: L, density: kg/L) -> kg {
+    return volume * density;
+}
+
+fn main() {
+    let on_board = fuel_mass(7682 L, 1.77 lb/L);
+    let required = 22300 kg;
+    let missing = required - on_board;
+    print(on_board);
+    print(missing);
+    print(missing / (1.77 lb/L) in L);    // litres still to add, computed with the right density
+}

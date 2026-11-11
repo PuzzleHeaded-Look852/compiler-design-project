@@ -1,0 +1,19 @@
+[project]
+name = "lumen-lang"
+version = "1.0.0"
+description = "Lumen: a language where every number knows its unit. Compiler + VM in Python."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+lumen = "lumen.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+testpaths = ["tests"]

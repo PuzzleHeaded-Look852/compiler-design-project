@@ -1,0 +1,181 @@
+LUMEN PITCH SCRIPT 5 OF 5
+AJAY KUMAR (24BCE2721): BYTECODE, THE VIRTUAL MACHINE, TESTING AND THE WEB PLAYGROUND
+Speaking time: about 5 minutes. You close the presentation, so you also give the wrap-up.
+Slides you speak on: 13 (the playground), 14 (testing, limits, what is next). You also cover the last two boxes of
+slide 5 (Bytecode and VM) and the "zero runtime cost" idea.
+
+------------------------------------------------------------
+READ THIS FIRST: WHAT THE PROJECT IS (even if you did nothing)
+------------------------------------------------------------
+Lumen is a small programming language we built, plus the compiler for it. In most languages a number is just a
+number: 9.8 could be metres, seconds or dollars. In Lumen a number carries its unit: "9.8 m/s^2", "12.5 lbf*s",
+"250 USD". The compiler checks units like a physics teacher checks working. After the check the units are erased,
+so the program that runs is plain arithmetic.
+
+Why it matters: NASA lost the $327.6 million Mars Climate Orbiter in 1999 because one program gave pound-force
+seconds and another read newton-seconds (a factor of 4.45). An Air Canada 767 ran out of fuel in 1983 because 1.77
+(pounds per litre) was used as kg per litre. To an ordinary compiler these are just "float". In Lumen both are
+compile errors.
+
+The compiler is a pipeline of seven phases:
+  lexer -> parser -> unit checker -> intermediate code -> optimizer -> BYTECODE -> VIRTUAL MACHINE
+The first five phases read, check and simplify the program. YOUR phases are the last two: turn the simple code
+into instructions for a small imaginary computer (bytecode), and then be that computer (the VM) and actually run
+it. Your files: codegen.py (about 158 lines), vm.py (about 156 lines), the tests folder, and the web playground in
+the playground folder (server.py about 187 lines, index.html about 350 lines).
+
+------------------------------------------------------------
+THE SCRIPT (say this, in your own words if you like)
+------------------------------------------------------------
+[HAND-OVER FROM NOEL]
+"Thank you Noel. The program is now simple and has no units. My part is to run it. That takes two phases: the code
+generator, which turns the intermediate code into bytecode, and the virtual machine, which runs the bytecode."
+
+[PHASE 6: BYTECODE]
+"The target is a small stack machine. Think of a pile of plates. To add two numbers you put both on the pile, then
+the ADD instruction takes the top two off and puts the answer back. So 't3 equals t1 times t2' becomes: LOAD t1,
+LOAD t2, MUL, STORE t3."
+"The whole instruction set is small. PUSH puts a constant on the stack. LOAD and STORE move values between the stack
+and a variable's slot. Then the arithmetic and comparison operations: ADD, SUB, MUL, DIV, MOD, POW, LT, LE, GT, GE,
+EQ, NE, plus NEG, NOT and I2F, which turns an int into a float. JMP, JZ and JNZ are jumps. CALL calls a Lumen
+function, CALLB calls a built-in like sqrt, RET returns, POP discards a value and PRINT prints."
+"Each variable and temporary gets a numbered slot in its function's frame. Labels become absolute addresses in a
+second pass."
+[DEMO 1: show fib's bytecode, command below]
+"Here is the Fibonacci function. LOAD n, PUSH 2, LT is 'n less than 2'. JZ jumps past the return if it is false.
+Then it computes n minus 1 and CALLs fib, computes n minus 2 and CALLs fib again, ADDs the two results and RETurns.
+Notice there is not a single unit anywhere in the bytecode. A unit conversion is just PUSH a factor, then MUL, and
+usually the optimizer has already folded even that away."
+
+[PHASE 7: THE VIRTUAL MACHINE]
+"The virtual machine is a classic fetch, decode, execute loop. Each function call gets a frame, which holds that
+function's local slots, its own operand stack and an instruction pointer. CALL pushes a new frame. RET pops it and
+hands the result to the caller's stack."
+"One design decision is worth explaining. The frames live in my own list, not on Python's call stack. So when a
+Lumen program recurses too deeply, I can count the depth and stop cleanly. The limit is 5000 nested calls and the
+error is a clear Lumen message, not a Python crash."
+"The VM also protects against infinite loops with a step limit of ten million instructions. And every runtime error
+carries the source line."
+[DEMO 2: runtime errors, commands below]
+"First, a program that divides by zero. It compiles fine, because the checker cannot always know the value, and the
+first call prints 5. The second call stops with 'division by zero' and shows the exact line. Next, a function that
+calls itself forever: 'call stack too deep, more than 5000 nested calls'. And a while-true loop is stopped by the
+step limit. The exit code for all of these is 3. The built-in functions are sqrt, abs, minimum, maximum, float and
+int, and sqrt of a negative number is also a clean runtime error."
+
+[ZERO RUNTIME COST: THE EVIDENCE]
+"The central claim of the project is that units cost nothing at run time. The evidence is in the structure. The VM
+and the code generator contain no unit logic at all. The VM only knows ints, floats, booleans and strings. And we
+have a test that compiles a program with units, 'let v: km/h = 10 m/s', and the same program written with the plain
+number 36.0, and checks the optimized code is identical. The units were checked, and then they were gone."
+
+[TESTING: SLIDE 14]
+"We have 187 automated tests across six test files. The checker has the most, 63, because it is the biggest and most
+important phase. There are tests for the lexer, the parser, the unit algebra, and the back end. On top of that
+there are 34 example programs, each with a recorded golden output. The test compares what the compiler prints now
+with what we recorded when we knew it was right, so any accidental change shows up immediately. There is also a
+test that runs the example programs with the optimizer on and off and checks the output is identical."
+
+[THE PLAYGROUND: SLIDE 13]
+"To make this easy to see, we built a web playground. It is a tiny local server, using only the Python standard
+library, wrapped around the real compiler, and a single web page. On the left are 28 examples: the Mars and Gimli
+bugs and their fixes, drug dosing, currency, error programs, and the optimizer demo. In the middle is the editor.
+On the right are tabs for the output, tokens, typed tree, IR, optimized IR, bytecode, units and statistics. The
+strip along the top shows which phase a program failed in. At the very end of the list there is a blank compiler,
+so you can type any program yourself."
+[DEMO 3: open the playground, pick Mars bug, then Mars fixed, then the blank compiler. See below.]
+
+[LIMITS AND WHAT IS NEXT: SLIDE 14, RIGHT SIDE]
+"To be honest about limits: Lumen checks one program at a time, and Mars crossed two programs. So we catch it
+where data enters with a declared type, but we cannot stop a person from writing the wrong unit. We have no
+temperature units like Celsius, because they need offsets. And our VM is written in Python, so it is not fast.
+Next steps would be a typed file boundary that closes the Mars gap, offset units for temperature, a native back
+end such as LLVM, and an editor plugin that shows inferred units."
+
+[CLOSE]
+"To sum up: seven phases, 3,437 lines of Python, 187 passing tests, and a language where Mars and Gimli are
+compile errors that cost nothing at run time. Thank you. We are happy to take questions."
+
+------------------------------------------------------------
+LIVE DEMO COMMANDS (run from the lumen-compiler folder, after: export PYTHONPATH=src)
+------------------------------------------------------------
+1) python -m lumen run examples/fib.lum --bytecode
+   Real output (the start): "== fib (1 param, 7 local slots)", then
+     0000 LOAD 0 ; n     0001 PUSH 2     0002 LT     0003 STORE 1 ; t1
+     0004 LOAD 1 ; t1    0005 JZ 0008 ; L1   0006 LOAD 0 ; n   0007 RET value
+     0008 LOAD 0 ; n     0009 PUSH 1     0010 SUB    ...   0013 CALL fib ; 1 arg(s)
+2) python -m lumen run examples/err_runtime.lum
+   Real output:  5
+                 examples/err_runtime.lum:3: runtime error: division by zero
+                     3 |     return a / b;
+3) python -m lumen run examples/err_recursion.lum
+   Real output:  examples/err_recursion.lum:2: runtime error: call stack too deep (more than 5000 nested calls)
+4) python -m lumen run examples/fib.lum --stats
+   Shows how many VM steps, function calls and the maximum call depth.
+5) python -m pytest -q
+   Real output: 187 passed
+6) The playground: double-click run_playground.command (or: python playground/server.py). It opens
+   http://localhost:8765. Pick "Mars Orbiter: the bug", press Run, then try "Blank compiler" and type:
+     unit h = 3600 s;
+     fn main() { print(120 km / 1.5 h); }
+   Expected output: 80.0 km/h. Now change it to "print(120 km + 1.5 h);" and see the unit error.
+
+------------------------------------------------------------
+IF YOU ONLY REMEMBER FIVE THINGS
+------------------------------------------------------------
+1. Bytecode = instructions for a small stack machine: PUSH, LOAD, STORE, arithmetic, jumps, CALL, RET, PRINT.
+2. The VM is fetch-decode-execute with a frame per function call. Frames are in our own list, so deep recursion is a
+   clean error (limit 5000), and a step limit of 10,000,000 catches infinite loops. Runtime errors show the line.
+3. Zero runtime cost: no unit logic in codegen.py or vm.py. A program with units and the same program with plain
+   numbers optimize to identical code.
+4. 187 tests, 34 example programs with golden outputs, an optimizer-on-versus-off comparison.
+5. The playground is a small standard-library Python server around the real compiler, with 28 examples, an
+   output tab for every phase and a blank editor.
+
+------------------------------------------------------------
+QUESTIONS THE PROFESSOR MAY ASK, AND SHORT ANSWERS
+------------------------------------------------------------
+Q: Are units really free at run time?
+A: Yes. By the time we generate bytecode every unit has been checked and erased. The VM only knows ints, floats,
+   bools and strings, and a conversion is just a multiply by a constant that the optimizer usually folds away.
+
+Q: Why a stack machine and not registers?
+A: A stack machine is the simplest target: code generation is almost mechanical, and it is easy to explain.
+
+Q: Why keep your own frames instead of using Python recursion?
+A: So we can limit the depth and report a clean Lumen error. Python's own recursion limit would crash with a
+   Python traceback.
+
+Q: How does the VM handle an infinite loop?
+A: Every instruction counts as a step. After 10,000,000 steps it stops with "step limit exceeded (infinite loop?)"
+   and the line number. Exit code 3.
+
+Q: What is a golden test?
+A: We record the correct output of each of the 34 examples once, in tests/golden. The test reruns each example and
+   compares with the recorded output. If anything changes by accident, the test fails.
+
+Q: How do you know the optimizer is safe?
+A: The test suite runs the example programs with and without the optimizer and compares the output. They must match.
+   (Noel can explain the safety rules.)
+
+Q: What does CALLB do?
+A: It calls a built-in function: sqrt, abs, minimum, maximum, float or int. CALL calls a function written in Lumen.
+
+Q: Why is it slow, and does that matter?
+A: The VM is written in Python, which is slow. For a teaching language that is fine. A native back end such as LLVM is
+   listed as future work.
+
+Q: How does the playground work?
+A: A tiny Python web server (standard library only) imports the real compiler. The page sends the code, the server
+   runs every phase and returns each phase's output as text, and the page shows it in tabs. Nothing is faked.
+
+------------------------------------------------------------
+NUMBERS TO KNOW
+------------------------------------------------------------
+7 phases | 3,437 lines of Python | 187 tests | 34 example programs | 28 playground examples
+codegen.py 158 lines, vm.py 156 lines | recursion limit 5000 calls | step limit 10,000,000
+Tests per file: checker 63, parser 20, backend and VM 28 (plus one per example), lexer 12, units 7.
+Where to look in the code if asked to show it: vm.py (class VM, method run is the fetch-decode-execute loop),
+codegen.py (gen_function), tests/test_backend.py, tests/golden/.
+NOTE: Do not claim "6,000 corrupted programs" or "24 of 24 programs use only ordinary opcodes" unless you can run
+it live. Those figures came from our review report and the scripts behind them are not in the project folder.

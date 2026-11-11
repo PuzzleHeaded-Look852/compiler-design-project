@@ -1,0 +1,18 @@
+// Everything the optimizer does, in one small program.
+unit h = 3600 s;
+unit mile = 1609.344 m;
+
+fn trip_km(d: mile) -> km {
+    let in_metres = d in m;          // two conversions of a run-time value...
+    return in_metres in km;          // ...fused into ONE multiply
+}
+
+fn main() {
+    let speed: km/h = 10 m/s;        // folded to the constant 36.0
+    let debug = false;
+    let scratch = 3 * 4 + 1;         // never used: deleted
+    if (debug) { print("debug on"); }// constant condition: branch removed
+    let limit = 2 * 50 km/h;
+    if (speed < limit) { print("under the limit"); }
+    print(trip_km(26.2 mile));
+}

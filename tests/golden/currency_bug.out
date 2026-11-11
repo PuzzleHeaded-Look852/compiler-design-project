@@ -1,0 +1,9 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/currency_bug.lum:7:19: error: dimension mismatch: cannot add USD to INR
+    7 |     let total = a + b;     // adding rupees to dollars: rejected, no rate was given
+      |                   ^
+      = help: '+' needs the same dimension on both sides. To combine different dimensions use `/` (would give INR/USD) or `*` (would give INR*USD)
+
+1 error generated.

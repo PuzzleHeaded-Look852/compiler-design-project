@@ -1,0 +1,9 @@
+unit INR;
+unit USD;
+
+fn main() {
+    let a = 100 INR;
+    let b = 5 USD;
+    let total = a + b;     // adding rupees to dollars: rejected, no rate was given
+    print(total);
+}

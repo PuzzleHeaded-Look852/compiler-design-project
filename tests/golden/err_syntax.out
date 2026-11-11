@@ -1,0 +1,25 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/err_syntax.lum:5:16: error: expected ';' after the declaration, found 'let'
+    5 |     let a = 5 m
+      |                ^
+
+examples/err_syntax.lum:6:19: error: expected ')' to close the parenthesis, found ';'
+    6 |     let b = (3 + 4;
+      |                   ^
+
+examples/err_syntax.lum:7:11: error: '=' is assignment, not comparison
+    7 |     if (a = 5 m) { print(a); }
+      |           ^
+      = help: use '==' to test for equality
+
+examples/err_syntax.lum:8:12: error: expected ')' after the printed value, found 'b'
+    8 |     print(a b);
+      |            ^
+
+examples/err_syntax.lum:9:13: error: expected an expression, found ';'
+    9 |     let c = ;
+      |             ^
+
+5 errors generated.

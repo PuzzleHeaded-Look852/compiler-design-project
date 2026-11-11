@@ -1,0 +1,36 @@
+LUMEN FINAL REVIEW: ORDER OF THE TALK AND HOW TO USE THESE SCRIPTS
+
+Each person has their own script file. Each file is self-contained: it explains the whole project in a minute,
+explains your part in plain English, gives the words to say, the live demo commands with the real output,
+five things to remember, and likely questions with answers. You can understand your part from the file alone,
+even if you did not write the code.
+
+Order of the talk (about 22 to 24 minutes plus questions)
+  1. Sanjay Suresh      slides 1, 2, 3, 5 + lexer, errors, command line      about 4 min   (file 1)
+  2. Advaith Sivakumar  slide 4, 11 + parser and syntax tree                 about 4 min   (file 2)
+  3. Sugesh Kumar       slides 6 to 10 + unit system and checker             about 5 min   (file 3)
+  4. Noel Ninan         slide 12 + intermediate code and optimizer           about 4 min   (file 4)
+  5. Ajay Kumar         slides 13, 14 + bytecode, VM, tests, playground      about 5 min   (file 5)
+
+How to prepare in 30 minutes
+  1. Read your file once, top to bottom.
+  2. Start the playground (double-click run_playground.command) and run your demo examples from the file.
+  3. Open your own code files in an editor and find the functions named at the bottom of your file.
+  4. Say the script out loud once, using your own words.
+  5. Read the questions section until you can answer without looking.
+
+Setup for live commands (only needed for command-line demos; the playground needs nothing)
+  cd lumen-compiler
+  export PYTHONPATH=src
+  python -m lumen run examples/mars_bug.lum
+
+Everyone should also be able to answer these without looking
+  - What problem does Lumen solve? (unit mistakes: Mars 1999, Gimli Glider 1983)
+  - What are the seven phases, in order? (lexer, parser, unit checker, IR, optimizer, bytecode, VM)
+  - Where do units exist? (only up to the checker; after that the program is plain numbers)
+  - Would Lumen really have caught Mars? (where data enters with a declared type, yes; it cannot stop a person
+    writing the wrong unit; it checks one program at a time)
+  - What are the limits? (single program, no Celsius, no quantity kinds, Python VM is slow)
+
+Team rule: if you are asked a question about another person's part, answer briefly from the 'five things' of
+that part and say "that part is explained in detail by <name>".

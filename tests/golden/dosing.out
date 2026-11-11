@@ -1,0 +1,6 @@
+exit code: 0
+--- stdout ---
+21.0 mg/h
+350.0 mcg/min
+9.523809524 h
+--- stderr ---

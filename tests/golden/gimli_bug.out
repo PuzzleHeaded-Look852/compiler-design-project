@@ -1,0 +1,9 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/gimli_bug.lum:13:42: error: argument 2 of 'fuel_mass': expected density (kg/L), found a plain number (float)
+   13 |     let kilograms = fuel_mass(dripstick, 1.77);   // bare number: which unit?
+      |                                          ^~~~
+      = help: if the number really is in kg/L, say so: `1.77 * 1 kg/L`; or write the literal with its unit (e.g. `4 kg/L`)
+
+1 error generated.

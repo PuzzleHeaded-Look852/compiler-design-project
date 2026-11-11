@@ -1,0 +1,153 @@
+LUMEN PITCH SCRIPT 2 OF 5
+ADVAITH SIVAKUMAR (24BCE2715): THE PARSER AND THE SYNTAX TREE
+Speaking time: about 4 minutes.
+Slides you speak on: 4 (the language at a glance), 11 (the typed tree, you cover how the tree is built).
+
+------------------------------------------------------------
+READ THIS FIRST: WHAT THE PROJECT IS (even if you did nothing)
+------------------------------------------------------------
+Lumen is a small programming language we built, plus the compiler for it. In most languages a number is just a
+number: 9.8 could be metres, seconds or dollars. In Lumen a number carries its unit: "9.8 m/s^2", "12.5 lbf*s",
+"250 USD". The compiler checks units like a physics teacher checks working: you cannot add metres to seconds, and
+a number in pound-force seconds is converted correctly (or rejected) where newton-seconds are needed. After the
+check the units are erased, so the program that runs is plain arithmetic.
+
+Why it matters: NASA lost the $327.6 million Mars Climate Orbiter in 1999 because one program gave pound-force
+seconds and another read newton-seconds (a factor of 4.45). An Air Canada 767 ran out of fuel in 1983 because 1.77
+(pounds per litre) was used as kg per litre. To an ordinary compiler these are just "float". In Lumen both are
+compile errors.
+
+The compiler is a pipeline of seven phases:
+  lexer -> PARSER -> unit checker -> intermediate code -> optimizer -> bytecode -> virtual machine
+Sanjay's lexer turns text into tokens (the words). YOUR phase, the parser, turns the tokens into a tree that shows
+how the program is built (the sentence structure). Your files: parser.py (about 465 lines) and ast_nodes.py (about
+239 lines).
+
+------------------------------------------------------------
+THE SCRIPT (say this, in your own words if you like)
+------------------------------------------------------------
+[HAND-OVER FROM SANJAY, SLIDE 4]
+"Thank you Sanjay. This slide shows what a Lumen program looks like. You can declare units with 'unit min = 60 s;'.
+A function can take units as types: 'fn pace(d: km, t: min) -> km/h'. A number followed by a unit is a quantity:
+42.195 km. 'in' converts explicitly: 'd in m'. My job, the parser, is to read the tokens and check that the program
+follows the grammar of the language, and to build a tree of what it means."
+
+[WHAT THE PARSER DOES]
+"The lexer gives me a flat list of words. A flat list does not tell you that in '2 + 3 * 4' the multiplication
+happens first. The parser builds a tree, where each operator has its operands as children. So '(2 + 3) * 4'
+becomes a multiply node with an add node on the left and 4 on the right. The brackets are gone, because the tree
+shape already says what happens first. That is called an abstract syntax tree, or AST, and it keeps only the
+meaning, not every bracket and semicolon."
+
+[HOW: RECURSIVE DESCENT]
+"I wrote the parser by hand using recursive descent. That means each rule of the grammar is one function. There is
+a function for a program, one for a function declaration, one for a statement, one for an expression, and so on.
+A rule that contains another rule simply calls its function. The grammar is LL(1), which means one token of
+lookahead is enough to decide which rule to use."
+
+"Operator precedence comes from layering. The expression function calls the one for 'or', which calls 'and', which
+calls equality, then comparison, then plus and minus, then times and divide, then unary minus, then power, and
+finally the smallest pieces: numbers, names and brackets. Rules lower in the chain bind tighter, which is why
+times beats plus. Binary operators are left-associative and I write them as loops, not left recursion, which would
+loop forever in a recursive descent parser."
+
+[THE UNIT PROBLEM: THE INTERESTING PART]
+"Units cause two special cases that an ordinary grammar cannot handle, and these are the clever bits."
+"Rule one: is a name a unit or a variable? If a name comes directly after a number, as in '5 km', it is a unit. No
+other construct in the language puts a name right after a number, so this is safe."
+"Rule two: is the slash a divide or part of the unit? In '12 km/h' the slash belongs to the unit, but in '10 m / t'
+we mean 'ten metres divided by the variable t'. The parser keeps extending a unit over a star or a slash only if
+the next name is a KNOWN unit. 'h' is a declared unit, so '12 km/h' is one speed. 't' is a variable, so '10 m / t'
+parses as '(10 m) divided by t'. If you want to divide by a variable that happens to share a unit name, use
+brackets."
+[DEMO 1: show the tree for 10 m / t, command below]
+
+[ERROR RECOVERY]
+"When the programmer makes a syntax mistake, the parser should not give up at the first one. I use panic-mode
+recovery: record the error, then skip ahead to the next semicolon or closing brace and carry on. Brace groups are
+skipped as a whole. So one run reports several real errors."
+[DEMO 2: run err_syntax, command below]
+"This program has five mistakes: a missing semicolon, an unclosed bracket, an equals sign where double equals was
+meant, a missing bracket in print, and a missing expression. All five are reported in one run, and the messages
+are specific. For example when someone writes 'if (a = 5 m)' it says '= is assignment, not comparison'."
+
+[SLIDE 11 BRIEFLY]
+"On the typed tree slide you can see the tree after the next phase has annotated it. The shape, the nodes like
+Let, Binary, Var and Print, is what my parser built. Sugesh's checker then adds the unit to every node, and
+inserts the Convert node you see there."
+
+[HAND OVER]
+"So the parser turns tokens into a tree and catches grammar mistakes. Sugesh will now explain how the compiler
+checks the units on that tree."
+
+------------------------------------------------------------
+LIVE DEMO COMMANDS (run from the lumen-compiler folder, after: export PYTHONPATH=src)
+------------------------------------------------------------
+1) Tree for a unit-versus-variable case. Save this as a file, for example /tmp/q.lum:
+     unit h = 3600 s;
+     fn main() { let t = 2 h; let d = 10 m / t; print(d); }
+   python -m lumen run /tmp/q.lum --ast
+   You will see: Binary(op='/') with children Num(value=10, units=m) and Var(name='t'). So '10 m / t' was read as
+   (10 m) / t. The Binary node is typed m/h.
+2) python -m lumen run examples/err_syntax.lum
+   Real output, five errors:
+     5:16 expected ';' after the declaration, found 'let'
+     6:19 expected ')' to close the parenthesis, found ';'
+     7:11 '=' is assignment, not comparison     (help: use '==' to test for equality)
+     8:12 expected ')' after the printed value, found 'b'
+     9:13 expected an expression, found ';'
+     5 errors generated.
+3) python -m lumen run examples/phases_demo.lum --ast
+   Full typed tree of the demo program.
+Or use the web playground: pick "Error: syntax" and press Run, or open the "Typed AST" tab on any example.
+
+------------------------------------------------------------
+IF YOU ONLY REMEMBER FIVE THINGS
+------------------------------------------------------------
+1. Parser = tokens in, tree (AST) out. The tree keeps meaning, not brackets.
+2. Recursive descent: one function per grammar rule. LL(1): one token of lookahead decides.
+3. Precedence comes from layering the rules (or, and, equality, comparison, plus/minus, times/divide, unary, power).
+4. Two unit rules: a name right after a number is a unit; a unit continues over * and / only if the next name is a
+   KNOWN unit. So 12 km/h is one speed but 10 m / t divides by the variable t.
+5. Panic-mode recovery: skip to the next ';' or '}' and carry on, so one run shows many syntax errors.
+
+------------------------------------------------------------
+QUESTIONS THE PROFESSOR MAY ASK, AND SHORT ANSWERS
+------------------------------------------------------------
+Q: Why recursive descent and not a parser generator like yacc?
+A: Hand-written is easier to explain, easier to give good error messages, and handles our two unit rules naturally.
+   Our grammar is small enough that it is simple to write by hand.
+
+Q: Is the grammar LL(1)?
+A: Yes. One token of lookahead picks the rule, plus a two-token peek to tell 'IDENT =' (an assignment) from an
+   expression statement, and the two unit rules.
+
+Q: What is the difference between a parse tree and an AST?
+A: A parse tree keeps every token, including brackets and semicolons. The AST keeps only the meaning.
+   '(2 + 3) * 4' becomes Binary('*', Binary('+', 2, 3), 4) with no bracket nodes.
+
+Q: How do you avoid left recursion?
+A: Binary operators are written as loops: parse one operand, then while the next token is the operator, parse
+   another operand and wrap them. That also gives left associativity.
+
+Q: Why can '10 m / t' not be read as a unit?
+A: 't' is a variable, not a known unit. The parser extends a unit over '/' only if the next name is a known unit,
+   so this divides ten metres by t.
+
+Q: Does the parser check that units make sense?
+A: No. It only reads the unit text. Checking that dimensions match is the checker's job (Sugesh).
+
+Q: What is panic mode?
+A: After a syntax error the parser skips tokens to a safe point, the next semicolon or closing brace, and keeps
+   parsing. Whole brace groups are skipped together. That is why one run reports several errors.
+
+Q: What does the grammar look like?
+A: Top of the file parser.py has it in EBNF: program = { unitDecl | function }; statement = let | assign | if |
+   while | return | print | block | exprStmt; and the expression ladder described above.
+
+------------------------------------------------------------
+NUMBERS TO KNOW
+------------------------------------------------------------
+parser.py about 465 lines, ast_nodes.py about 239 lines | 20 parser tests | 7 phases | 187 tests in the project
+Where to look in the code if asked to show it: parser.py, class Parser. Methods unit_literal and unit_factor
+handle the unit rules, sync_statement is the panic mode, binary_level is the loop used by every binary operator.

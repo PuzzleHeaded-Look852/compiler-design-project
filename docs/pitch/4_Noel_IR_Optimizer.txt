@@ -1,0 +1,166 @@
+LUMEN PITCH SCRIPT 4 OF 5
+NOEL NINAN (24BCE2737): INTERMEDIATE CODE AND THE OPTIMIZER
+Speaking time: about 4 minutes.
+Slides you speak on: 12 (the optimizer). You also cover slide 5's middle two boxes (IR and Optimizer).
+
+------------------------------------------------------------
+READ THIS FIRST: WHAT THE PROJECT IS (even if you did nothing)
+------------------------------------------------------------
+Lumen is a small programming language we built, plus the compiler for it. In most languages a number is just a
+number: 9.8 could be metres, seconds or dollars. In Lumen a number carries its unit: "9.8 m/s^2", "12.5 lbf*s",
+"250 USD". The compiler checks units like a physics teacher checks working. After the check the units are erased,
+so the program that runs is plain arithmetic.
+
+Why it matters: NASA lost the $327.6 million Mars Climate Orbiter in 1999 because one program gave pound-force
+seconds and another read newton-seconds (a factor of 4.45). An Air Canada 767 ran out of fuel in 1983 because 1.77
+(pounds per litre) was used as kg per litre. To an ordinary compiler these are just "float". In Lumen both are
+compile errors.
+
+The compiler is a pipeline of seven phases:
+  lexer -> parser -> unit checker -> INTERMEDIATE CODE -> OPTIMIZER -> bytecode -> virtual machine
+By the time the program reaches YOUR phases, the front end (Sanjay, Advaith, Sugesh) has already checked
+everything and turned every unit conversion into an explicit multiplication by an exact factor. From here on there
+are no units, only numbers. Your files: ir.py (about 188 lines), irgen.py (about 190 lines) and optimizer.py
+(about 298 lines).
+
+------------------------------------------------------------
+THE SCRIPT (say this, in your own words if you like)
+------------------------------------------------------------
+[HAND-OVER FROM SUGESH]
+"Thank you Sugesh. After the checker, the program is correct and every conversion is explicit. My two phases make
+it simple and then make it fast. First I turn the tree into intermediate code, then the optimizer improves it."
+
+[PHASE 4: INTERMEDIATE CODE]
+"The intermediate code is called three-address code. Every instruction does one small thing, with at most two
+inputs and one output, like 't3 equals t1 times t2'. Complicated expressions are broken into steps using
+temporary variables t1, t2 and so on. Control flow is flat: there are no loops or ifs, only labels and jumps."
+"For example, take 'if (a && b)'. The code first copies a into t1. If t1 is false, it jumps straight over the
+evaluation of b. Only otherwise does it compute b. So the right-hand side is evaluated only when needed. That is
+short-circuit evaluation, done with plain jumps. A while loop becomes: a label, a test, a conditional jump out, the
+body, and a jump back."
+"Notice what is missing: units. The checker already turned every conversion into one multiplication with an exact
+factor, shown in the code as a line ending in 'convert'. For example 10 m/s as km/h is 't1 = 10.0 * 3.6'. A unit
+is now just an ordinary multiplication."
+"Why have an intermediate form at all? It has no source syntax and no machine detail, so the optimizer can work on
+it, and a different back end could be attached later."
+
+[PHASE 5: THE OPTIMIZER. SLIDE 12]
+"The optimizer rewrites the intermediate code to do the same thing with fewer instructions. It runs several small
+passes again and again until nothing changes, which is called a fixed point."
+"Here is the key example from the slide. 'let v: km/h = 10 m/s; print(v);' before optimization is: t1 equals 10.0
+times 3.6, v equals t1, print v. After optimization it is just: print 36.0 km/h. The whole conversion has been
+calculated at compile time. That is the zero-runtime-cost claim of the project, and you can see it: there is no
+unit and no conversion left in the running program."
+
+"The passes are:
+ One, constant folding: 2 plus 3 becomes 5.
+ Two, constant propagation: if x is 5, then x plus 1 becomes 6.
+ Three, copy propagation: if t equals x, use x directly.
+ Four, conversion fusion, the one specific to Lumen: two conversions in a row are combined into one by multiplying
+ their exact factors.
+ Five, algebraic simplification: x times 1, x plus 0 become x.
+ Six, branch folding: an if whose condition is a known constant is removed.
+ Seven, unreachable code removal: instructions after a return or jump.
+ Eight, dead code elimination: an assignment whose result is never used is deleted."
+
+[CONVERSION FUSION: THE NICE PROOF]
+"Conversion fusion is exact because the factors are fractions. If you convert kilometres to metres and straight
+back, the two factors, 1000 and one over 1000, multiply to exactly 1, and the whole conversion disappears. In the
+demo the function f takes km, converts to metres and back to km. Before optimization it has two multiply lines.
+After optimization the body is just 'return x'. With floating point you could not promise that."
+
+[THE OPTIMIZER DEMO]
+"Our optimizer_demo program shows everything in one program: 20 instructions shrink to 6. It folded 5 constants,
+propagated 9 operands, fused 1 conversion pair, folded 2 branches, removed 2 unreachable instructions and deleted
+11 dead assignments."
+[DEMO 1 and 2: show the unoptimized and the optimized code, commands below]
+
+[SAFETY]
+"An optimizer must never change what a program does, so I follow three safety rules. One: the optimizer and the
+virtual machine share the same arithmetic function, so folding a constant at compile time gives exactly the
+answer the machine would give at run time. Two: it forgets what it knows at every label, because at a label two
+different paths can join and a variable might hold different values. Three: it never folds or deletes a division
+that could fail. For example 1 divided by 0 is left in the program, so the error still happens at run time with a
+line number. We test this by running programs with and without the optimizer and comparing the output: it is
+identical."
+
+[HAND OVER]
+"So the program is now small, and has no units. Ajay will show how it is turned into bytecode and run."
+
+------------------------------------------------------------
+LIVE DEMO COMMANDS (run from the lumen-compiler folder, after: export PYTHONPATH=src)
+------------------------------------------------------------
+1) python -m lumen run examples/zero_cost.lum --ir
+   Real output:   func main():
+                      t1 = 10.0 * 3.6   ; convert
+                      v = t1
+                      print v "km/h"
+                      return
+2) python -m lumen run examples/zero_cost.lum --ir-opt
+   Real output:   func main():
+                      print 36.0 "km/h"
+                      return
+3) python -m lumen run examples/optimizer_demo.lum --stats
+   Real output (the last lines): instructions before optimization 20, after 6; constants folded 5; operands
+   propagated 9; unit conversions fused 1; branches folded 2; unreachable removed 2; dead assignments removed 11.
+4) Round-trip proof. Save as /tmp/r.lum:
+     fn f(x: km) -> km { return (x in m) in km; }
+     fn main() { print(f(3 km)); }
+   python -m lumen run /tmp/r.lum --ir       shows two 'convert' lines (x * 1000, then * 0.001)
+   python -m lumen run /tmp/r.lum --ir-opt   shows the function body is just: return x
+5) python -m lumen run examples/optimizer_demo.lum --no-opt
+   Same output as with the optimizer. That is the safety claim.
+Or use the web playground: pick "Optimizer demo", open the "IR" tab, then the "Optimized IR" tab, then "Stats". The
+"optimizer" tick box turns the optimizer on and off.
+
+------------------------------------------------------------
+IF YOU ONLY REMEMBER FIVE THINGS
+------------------------------------------------------------
+1. Three-address code = one small operation per line, temporaries t1, t2, flat jumps and labels. No units any more.
+2. && and || become jumps, so the right side runs only when needed. while becomes label, test, jump out, body, jump back.
+3. The optimizer repeats its passes until nothing changes: fold, propagate, fuse conversions, simplify, prune
+   branches, remove unreachable and dead code.
+4. Conversion fusion works because conversion factors are exact fractions. km to m to km becomes exactly 1.
+5. Safe: it shares arithmetic with the VM, forgets facts at labels, and never removes a division that could fail.
+
+------------------------------------------------------------
+QUESTIONS THE PROFESSOR MAY ASK, AND SHORT ANSWERS
+------------------------------------------------------------
+Q: How do you know the optimizer never changes the result?
+A: It uses the same arithmetic function as the VM (ir.eval_binop). And we have a differential test that runs every
+   example program with and without the optimizer and compares the output.
+
+Q: Why reset knowledge at every label?
+A: A label is a join point. Code can arrive from two places, so a variable known to be 5 on one path may not be 5 on
+   the other. Forgetting at labels is the conservative, safe choice.
+
+Q: What is a basic block?
+A: A straight run of instructions with no jumps into the middle and no jumps out except at the end. The local passes
+   (folding, propagation, fusion) work inside one basic block.
+
+Q: Why is division by zero never folded?
+A: Folding it would remove the error from the program. We keep the instruction, so the VM reports "division by zero"
+   with the source line, exactly as an unoptimized program would.
+
+Q: Is fusing conversions exact?
+A: The factor is an exact fraction (Python Fraction), multiplied exactly and rounded only once when it becomes a
+   float. km to m to km folds to exactly 1.
+
+Q: Why have an intermediate code instead of optimizing the tree?
+A: A flat, simple form is easier to optimize and does not depend on the source syntax or the target machine.
+
+Q: Which optimizations are not done?
+A: Dataflow across branches and loops. Our passes work inside basic blocks plus simple jump clean-up. It is listed
+   as future work.
+
+Q: Does the optimizer matter for correctness?
+A: No. Programs behave the same with it off. It only reduces instructions (for example 20 to 6 in optimizer_demo,
+   10 to 2 in orbit.lum).
+
+------------------------------------------------------------
+NUMBERS TO KNOW
+------------------------------------------------------------
+ir.py about 188 lines, irgen.py about 190 lines, optimizer.py about 298 lines | 20 to 6 instructions (optimizer_demo)
+10 to 2 (orbit.lum) | passes run until a fixed point (5 rounds on optimizer_demo)
+Where to look in the code if asked to show it: irgen.py (short_circuit turns && into jumps, x_Convert makes the
+CONV instruction), optimizer.py (local_pass, simplify, fold_branches, remove_unreachable, eliminate_dead, optimize).

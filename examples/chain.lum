@@ -1,0 +1,10 @@
+// Conversion chains are fused by the optimizer into one exact factor.
+unit mile = 1609.344 m;
+
+fn main() {
+    let d = 26.2 mile;
+    let km_ = d in km;
+    let again = km_ in m;
+    print(again);
+    print(d in m);
+}

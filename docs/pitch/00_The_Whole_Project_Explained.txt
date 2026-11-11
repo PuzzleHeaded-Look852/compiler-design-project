@@ -1,0 +1,335 @@
+LUMEN: THE WHOLE PROJECT EXPLAINED IN SIMPLE WORDS
+For all five of us. Read this once, top to bottom, before reading your own script. After this, every part of
+the project should make sense, including the parts you did not write.
+
+Team: Sanjay Suresh (24BCE2685), Sugesh Kumar (24BCE2687), Noel Ninan (24BCE2737),
+      Advaith Sivakumar (24BCE2715), Ajay Kumar (24BCE2721)
+Course: Compiler Design (BCSE307L)
+
+============================================================
+1. THE ONE-SENTENCE VERSION
+============================================================
+Lumen is a programming language where every number carries its unit (metres, seconds, kg, rupees...), and the
+compiler we built checks the units for mistakes before the program ever runs.
+
+============================================================
+2. WHY WE BUILT IT: TWO TRUE STORIES
+============================================================
+In normal programming languages, a number is just a number. The computer does not know if 12.5 means metres,
+seconds, or dollars. That has caused real disasters.
+
+STORY 1: MARS CLIMATE ORBITER, 1999
+NASA's spacecraft was supposed to pass about 226 km above Mars. One team's software calculated the thruster push
+in "pound-force seconds". Another team's software expected "newton-seconds". Nobody converted. The two units differ
+by a factor of 4.45. The spacecraft went in far too low (about 57 km), and it was lost. Cost: $327.6 million.
+
+STORY 2: THE GIMLI GLIDER, 1983
+An Air Canada Boeing 767 had to calculate how much fuel to load. The crew used the number 1.77, which is
+pounds per litre, where the formula needed kilograms per litre (0.803). They loaded less than half the fuel
+they needed. Both engines stopped at 41,000 feet. The pilots glided about 17 minutes to a small airfield, and
+luckily nobody died.
+
+In both cases the number was "correct" but its unit was wrong, and the computer could not notice because to it, a
+number is just a number. In Lumen, both of those mistakes are compile errors. The program will not even start.
+
+============================================================
+3. THE BIG IDEA IN THREE STEPS
+============================================================
+STEP 1. THE UNIT IS PART OF THE TYPE.
+  In most languages the type of a number is "int" or "float". In Lumen the type also says what the number measures.
+  "9.8 m/s^2" (acceleration) and "12.5 lbf*s" (impulse) are different kinds of value, the same way a string and
+  an integer are different kinds of value in other languages.
+
+STEP 2. THE COMPILER DOES THE PHYSICS.
+  When you write an expression, the compiler works out the unit of the answer, like a physics teacher checking your
+  working:
+     - Adding or subtracting needs the SAME kind of unit.  3 m + 2 s  is an error. 1 km + 500 m is fine (1.5 km).
+     - Multiplying combines the units.   3 m * 4 m = 12 m^2
+     - Dividing cancels or combines.     100 m / 20 s = 5 m/s     and    2 km / 500 m = 4 (a plain number)
+  If the units are the same kind but a different size (km versus m, pound versus kilogram), the compiler converts
+  automatically and exactly. If they are different kinds (length versus time), it refuses and explains why.
+
+STEP 3. THEN THE UNITS ARE ERASED.
+  After checking, the compiler removes all unit information. The program that actually runs is plain arithmetic.
+  So there is no cost at run time. The units exist only to protect the programmer.
+
+How the Mars bug looks in Lumen:
+    fn update_trajectory(impulse: N*s) { ... }       // this function wants newton-seconds
+    update_trajectory(12.5);                        // ERROR: a bare number, which unit?
+    update_trajectory(12.5 lbf*s);                  // OK: the compiler converts to 55.6 N*s automatically
+
+============================================================
+4. WHAT A LUMEN PROGRAM LOOKS LIKE
+============================================================
+    unit h = 3600 s;                  // declare a unit: one hour is 3600 seconds
+
+    fn pace(d: km, t: min) -> km/h {  // a function whose parameters and result have units
+        return d / t;                 // km per minute is converted to km/h by the compiler
+    }
+
+    fn main() {
+        let d = 42.195 km;            // a number followed by a unit is a "quantity"
+        let t = 3 h + 30 min;         // mixed units are converted exactly
+        print(pace(d, t));            // prints 12.05571429 km/h
+        print(d in m);                // "in" converts explicitly: prints 42195.0 m
+    }
+
+Everything else is ordinary: variables (let), functions (fn), if/else, while loops, return, print, and the types
+int, float, bool and string. Built-in functions: sqrt, abs, minimum, maximum, float, int.
+Built-in units: m (metres), kg, s (seconds), bit, with prefixes (km, mm, mg, ms, Mbit...). Programs can declare more
+with "unit". Money works too: "unit INR;" creates a brand-new kind of unit, so rupees and dollars can never be
+added together by accident.
+
+============================================================
+5. WHAT IS A COMPILER? (THE FACTORY PICTURE)
+============================================================
+A compiler is a translator. You write a program in a language people can read, and the compiler turns it into
+something a machine can run. Doing it in one jump would be very hard, so a compiler works like an assembly line
+with several stations. Each station takes the output of the one before, does one job, and passes it on.
+
+Our assembly line has SEVEN stations (we call them phases):
+
+   text  ->  LEXER  ->  PARSER  ->  UNIT CHECKER  ->  IR  ->  OPTIMIZER  ->  BYTECODE  ->  VM  ->  answer
+             words     sentence     does the         simple    makes it        machine     runs it
+                       structure    physics          steps     smaller         code
+
+   Stations 1 to 3 (lexer, parser, unit checker) are the FRONT END. They understand the program and its units.
+   Stations 4 and 5 (IR, optimizer) are the MIDDLE. They make the program simple and small.
+   Stations 6 and 7 (bytecode, VM) are the BACK END. They run it.
+   Units exist only in the front end. From the IR onwards, everything is plain numbers.
+
+============================================================
+6. FOLLOW ONE PROGRAM THROUGH ALL SEVEN STATIONS
+============================================================
+All the output below is REAL: it is what the compiler prints. This is the file examples/phases_demo.lum:
+
+    unit h = 3600 s;
+    fn main() {
+        let d = 90 km;
+        let t = 1.5 h;
+        let v = d / t;
+        print(v);
+        print(v in m/s);
+    }
+
+In words: a car goes 90 km in 1.5 hours. Print its speed, then print the speed in metres per second.
+
+------------------------------------------------------------
+STATION 1: THE LEXER (Sanjay)   "Break the text into words."
+------------------------------------------------------------
+It reads the text one character at a time and groups the characters into tokens. For "let d = 90 km;":
+    LET   IDENT(d)   ASSIGN   INT(90)   IDENT(km)   SEMI
+Each token remembers its line and column so error messages can point at the exact spot. Numbers are kept as
+exact fractions, so 0.1 is exactly one tenth and nothing drifts. The lexer does NOT yet know that "km" is a unit;
+it just sees a name.
+Run it yourself:  python -m lumen run examples/phases_demo.lum --tokens
+
+------------------------------------------------------------
+STATION 2: THE PARSER (Advaith)   "Work out the sentence structure."
+------------------------------------------------------------
+A flat list of words does not say what happens first. The parser builds a tree. For "d / t" it builds a
+division node with "d" and "t" as its two children. The tree keeps the meaning and drops the brackets and
+semicolons (it is called an abstract syntax tree, or AST).
+The parser also makes two unit decisions: a name right after a number is a unit (so "90 km" is a quantity), and
+a unit continues over "/" only if the next name is a KNOWN unit (so "12 km/h" is one speed, but "10 m / t"
+divides ten metres by the variable t).
+If the code has a syntax mistake, the parser reports it, skips to the next ";" or "}", and carries on, so you see
+several errors at once.
+
+------------------------------------------------------------
+STATION 3: THE UNIT CHECKER (Sugesh)   "Do the physics. This is the heart of the project."
+------------------------------------------------------------
+It walks the tree from the bottom up and works out the unit of every piece:
+    d = 90 km          ->  length (km)
+    t = 1.5 h          ->  time (h)
+    v = d / t          ->  length / time = speed (km/h)
+    v in m/s           ->  same kind of unit, different size, so insert a CONVERSION: multiply by 5/18
+Real output (run with --ast):
+    Let(name='v')
+      Binary(op='/')  : km/h
+        Var(name='d')  : km
+        Var(name='t')  : h
+    Print(label='m/s')
+      Convert(from_scale=0.2777777777777778, to_scale=1)  : m/s
+        Var(name='v')  : km/h
+Under the hood every type is three things: the KIND (int or float), the DIMENSION (what it measures, stored as
+a list of exponents: speed is metres to the power 1 and seconds to the power minus 1), and the SCALE (how big the
+unit is: km is 1000 metres, an hour is 3600 seconds). If we had written "d + t" it would stop here with
+"cannot add time (h) to length (km)" and a hint. After this station the units are no longer needed.
+
+------------------------------------------------------------
+STATION 4: INTERMEDIATE CODE, IR (Noel)   "Turn it into very simple steps."
+------------------------------------------------------------
+The tree becomes "three-address code": one tiny operation per line, with temporary variables. Real output (--ir):
+    func main():
+        d = 90.0
+        t = 1.5
+        t1 = d / t
+        v = t1
+        print v "km/h"
+        t2 = v * 0.2777777777777778   ; convert
+        print t2 "m/s"
+        return
+Look at the "convert" line. The unit conversion is now just an ordinary multiplication by a number. There are no
+units any more.
+
+------------------------------------------------------------
+STATION 5: THE OPTIMIZER (Noel)   "Do the easy work now, so the program does not have to later."
+------------------------------------------------------------
+Because everything here is a known constant (90, 1.5 and the conversion factor), the compiler can calculate the
+answers right now. Real output (--ir-opt):
+    func main():
+        print 60.0 "km/h"
+        print 16.666666666666668 "m/s"
+        return
+The 8 instructions became 3. The whole calculation, including the unit conversion, was done at compile time.
+That is what "zero runtime cost" means: by the time the program runs, there is nothing left to compute and no unit
+left to check.
+
+------------------------------------------------------------
+STATION 6: BYTECODE (Ajay)   "Write it as instructions for a small imaginary computer."
+------------------------------------------------------------
+The target is a stack machine. Picture a pile of plates: to add two numbers you put both on the pile and an ADD
+instruction replaces them with the answer. Real output (--bytecode):
+    PUSH   60.0
+    PRINT  "km/h"
+    PUSH   16.666666666666668
+    PRINT  "m/s"
+    RET
+Five instructions, no units anywhere.
+
+------------------------------------------------------------
+STATION 7: THE VIRTUAL MACHINE, VM (Ajay)   "Run it."
+------------------------------------------------------------
+The VM executes the bytecode one instruction at a time. Real output:
+    60.0 km/h
+    16.66666667 m/s
+(The "km/h" and "m/s" labels were decided at compile time and travel with the print instruction as plain text.)
+The VM also protects the user: division by zero, runaway recursion (limit 5000 calls) and infinite loops
+(limit 10 million steps) all stop with a clear message and the line number, never a crash.
+
+============================================================
+7. HOW THE COMPILER TALKS TO THE USER (SANJAY)
+============================================================
+Every phase reports problems the same way, with the line, a caret under the exact spot, and where possible a
+help line that suggests the fix. The compiler never shows a Python crash for a mistake in the user's program.
+Real example (examples/mars_bug.lum):
+
+    mars_bug.lum:13:23: error: argument 1 of 'update_trajectory': expected impulse (N*s), found a plain number
+       13 |     update_trajectory(from_ground_file);
+          |                       ^~~~~~~~~~~~~~~~~
+          = help: if the number really is in N*s, say so: `from_ground_file * 1 N*s`;
+                  or write the literal with its unit (e.g. `4 N*s`)
+
+Stop rules (compiler.py): spelling-level errors are shown alone, because they confuse everything after them.
+Syntax errors stop before the unit checker. Warnings (like "variable never used") are hidden if there are errors.
+Exit codes: 0 ran fine, 1 compile error, 2 file could not be read, 3 runtime error.
+
+============================================================
+8. THE THREE CLEVER IDEAS TO BE PROUD OF
+============================================================
+1. UNITS AS TYPES, CHECKED WITH EXPONENT ARITHMETIC.
+   Multiply adds exponents, divide subtracts them, add needs them equal. That one rule set catches whole families
+   of bugs, and the same rules work for any unit, including ones the user invents.
+
+2. EXACT FRACTIONS EVERYWHERE UNTIL THE VERY END.
+   All conversion factors are exact fractions, so 1 km to metres and back to km is exactly 1, not 0.9999999. This
+   is what lets the optimizer fuse two conversions into one safely, and make "km to m to km" disappear completely.
+
+3. UNITS ARE ERASED, SO THEY COST NOTHING.
+   The VM and the code generator contain no unit logic at all. All the safety was paid for at compile time.
+
+============================================================
+9. HOW WE KNOW IT WORKS
+============================================================
+ - 187 automated tests (checker 63, parser 20, lexer 12, unit algebra 7, back end and VM 28, plus one per example).
+ - 34 example programs, each with a recorded "golden" output. The tests re-run each example and compare, so any
+   accidental change shows up immediately.
+ - Every example is run with the optimizer on and off and must print exactly the same thing.
+ - A web playground (playground/server.py) lets anyone try the compiler in a browser with 28 examples.
+ - Size: about 3,437 lines of Python, no outside libraries.
+
+============================================================
+10. HONEST LIMITS (SAY THESE BEFORE THE PROFESSOR ASKS)
+============================================================
+ - Lumen checks ONE program at a time. Mars crossed two programs. Lumen catches it where data enters a function
+   with a declared unit (a bare number is rejected), but it cannot stop a person from deliberately writing the
+   wrong unit.
+ - No temperatures in Celsius or Fahrenheit. They have an offset (0 C is not 0 K), and our conversions are
+   scale-only. That needs a new kind of type: future work.
+ - It tracks dimensions, not kinds of quantity. Torque and energy have the same dimension, so Lumen cannot
+   tell them apart.
+ - Whole-number exponents only, and functions cannot be generic over units.
+ - The VM is written in Python, so it is not fast. A native back end (for example LLVM) is future work.
+
+============================================================
+11. WHO OWNS WHAT, AND HOW THE PARTS CONNECT
+============================================================
+    Part 1  Sanjay     lexer.py, tokens.py, errors.py, cli.py, compiler.py        text -> tokens, error messages, command line
+    Part 2  Advaith    parser.py, ast_nodes.py                                    tokens -> tree
+    Part 3  Sugesh     units.py, semantic.py                                      tree -> checked tree with units and conversions
+    Part 4  Noel       ir.py, irgen.py, optimizer.py                              checked tree -> simple code -> smaller code
+    Part 5  Ajay       codegen.py, vm.py, tests/, playground/                     code -> bytecode -> running program, tests, web page
+
+The "handshake" between parts is the data each one passes on:
+    Sanjay hands Advaith a list of tokens.   Advaith hands Sugesh a tree.   Sugesh hands Noel the same tree with
+    units and conversions added.   Noel hands Ajay a short list of simple instructions.   Ajay's VM prints the answer.
+
+============================================================
+12. GLOSSARY: THE WORDS YOU WILL HEAR
+============================================================
+Compiler        A program that translates a program from one form to another.
+Phase           One station on the assembly line (we have seven).
+Token           One "word" of the program, such as LET, a name, a number, or a symbol.
+Lexer           Phase 1. Turns text into tokens.
+Parser          Phase 2. Turns tokens into a tree.
+Grammar         The rules for what a valid program looks like.
+Recursive descent  A way of writing a parser where each grammar rule is one function.
+AST             Abstract syntax tree: the program as a tree of meaning, without brackets and semicolons.
+Dimension       What a number measures: length, time, speed. Stored as exponents of base units.
+Scale           How big a unit is compared with the base unit (km is 1000 m).
+Type checker    Phase 3. Works out the type (here: including the unit) of every expression.
+IR              Intermediate representation: a simple form between the tree and the machine code.
+Three-address code  IR where each line does one operation: t3 = t1 * t2.
+Constant folding    Calculating at compile time what could be calculated at run time (2+3 becomes 5).
+Dead code       Code whose result is never used, so it can be deleted.
+Conversion fusion   Combining two unit conversions into one (Lumen-specific).
+Bytecode        Instructions for a small imaginary computer.
+Stack machine   A computer that does arithmetic on a pile (stack) of values.
+VM              Virtual machine: a program that runs bytecode.
+Frame           The workspace for one function call inside the VM.
+Diagnostic      One error or warning message with its location and help.
+Golden test     A test that compares today's output with a recorded correct output.
+
+============================================================
+13. HOW TO RUN IT YOURSELF (2 MINUTES)
+============================================================
+Easiest: double-click run_playground.command. A web page opens. Pick "Mars Orbiter: the bug", press Run. Click the
+tabs on the right (Tokens, Typed AST, IR, Optimized IR, Bytecode) to see each station's output. The last item in
+the list is a blank editor for your own programs.
+
+Command line (from the lumen-compiler folder):
+    export PYTHONPATH=src
+    python -m lumen run examples/mars_bug.lum          # compile error
+    python -m lumen run examples/mars_fixed.lum        # 55.60277019 N*s
+    python -m lumen run examples/phases_demo.lum --tokens      # station 1
+    python -m lumen run examples/phases_demo.lum --ast         # station 3
+    python -m lumen run examples/phases_demo.lum --ir          # station 4
+    python -m lumen run examples/phases_demo.lum --ir-opt      # station 5
+    python -m lumen run examples/phases_demo.lum --bytecode    # station 6
+    python -m lumen run examples/phases_demo.lum               # station 7 (the answer)
+    python -m pytest -q                                          # 187 passed
+
+============================================================
+14. THE 30-SECOND AND 2-MINUTE ANSWERS (MEMORISE ONE)
+============================================================
+30 SECONDS:
+"Lumen is a language where numbers carry units. The compiler checks the units, converts correctly between
+compatible ones, and rejects incompatible ones, so mistakes like NASA's Mars Orbiter, where pound-force seconds
+were read as newton-seconds, become compile errors. After checking, the units are erased, so there is no cost at
+run time. It is a full compiler with seven phases, 187 tests and a web playground."
+
+2 MINUTES:
+Add to the above: the two disasters; the three steps (unit is part of the type, compiler does the physics, then
+units are erased); the seven phases and what each hands to the next; one live example, mars_bug then mars_fixed;
+the optimizer folding a whole conversion into a constant; and the honest limits (one program at a time, no Celsius).

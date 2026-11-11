@@ -1,0 +1,22 @@
+// Free fall: d = 1/2 g t^2, and the time back from the distance with sqrt.
+unit h = 3600 s;
+
+fn fall_distance(t: s) -> m {
+    let g = 9.81 m/s^2;
+    return 0.5 * g * t^2;
+}
+
+fn fall_time(d: m) -> s {
+    let g = 9.81 m/s^2;
+    return sqrt(2 * d / g);
+}
+
+fn main() {
+    print(fall_distance(3 s));
+    print(fall_time(100 m));
+    let t = 0 s;
+    while (t < 5 s) {
+        print(fall_distance(t));
+        t = t + 1 s;
+    }
+}

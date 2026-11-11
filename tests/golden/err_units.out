@@ -1,0 +1,34 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/err_units.lum:9:18: error: cannot initialize 'v': expected speed (m/s), found length (m)
+    9 |     let v: m/s = race;                 // length where speed is wanted
+      |                  ^~~~
+      = help: a speed is a length / time: try `race / t`
+
+examples/err_units.lum:10:20: error: dimension mismatch: cannot add time (s) to length (m)
+   10 |     let bad = race + t;                // metres plus seconds
+      |                    ^
+      = help: '+' needs the same dimension on both sides. To combine different dimensions use `/` (would give speed) or `*` (would give length*time)
+
+examples/err_units.lum:11:25: error: argument 2 of 'speed': expected time (s), found an int
+   11 |     let w = speed(race, 5);            // bare number for a time
+      |                         ^
+      = help: if the number really is in s, say so: `5 * 1 s`; or write the literal with its unit (e.g. `4 s`)
+
+examples/err_units.lum:12:18: error: cannot convert length (m) to time (s)
+   12 |     let q = race in s;                 // not convertible
+      |                  ^~
+      = help: length can be converted to: nm, um, mm, cm, km, Mm
+
+examples/err_units.lum:13:15: error: unknown unit 'mtr'
+   13 |     let z = 5 mtr;                     // misspelled unit
+      |               ^~~
+      = help: did you mean 'm'?
+
+examples/err_units.lum:14:14: error: cannot compare length (m) with time (s)
+   14 |     if (race > t) { print(1); }        // comparing length with time
+      |              ^
+      = help: '>' needs the same dimension on both sides. To combine different dimensions use `/` (would give speed) or `*` (would give length*time)
+
+6 errors generated.

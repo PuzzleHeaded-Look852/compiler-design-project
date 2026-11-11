@@ -1,0 +1,17 @@
+// Drug infusion bugs the compiler catches.
+unit min = 60 s;
+unit h = 3600 s;
+unit mcg = 1 ug;
+
+fn pump_rate(weight: kg, order: mcg/kg/min) -> mg/h {
+    return weight * order;
+}
+
+fn main() {
+    let patient = 70 kg;
+    let a = pump_rate(patient, 5);            // 5 of what?
+    let b = pump_rate(patient, 5 mg/kg/min);  // fine: mg/kg/min converts to mcg/kg/min
+    let c = pump_rate(5 s, 5 mcg/kg/min);     // a time is not a body weight
+    let total = b + 5 s;                      // a mass flow plus a time
+    print(total);
+}

@@ -1,0 +1,16 @@
+unit J = 1 kg*m^2/s^2;
+unit kJ = 1000 J;
+unit h = 3600 s;
+
+fn kinetic(m: kg, v: m/s) -> J {
+    return 0.5 * m * v^2;
+}
+
+fn main() {
+    let car = 1500 kg;
+    let speed = 90 km/h;
+    let e = kinetic(car, speed);     // km/h converted to m/s inside the call
+    print(e);
+    print(e in kJ);
+    print(sqrt(2 * e / car) in km/h);
+}

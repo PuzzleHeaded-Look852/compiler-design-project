@@ -1,0 +1,8 @@
+// Compiles and runs, but the compiler points out suspicious code.
+fn main() {
+    let unused = 5 kg;
+    let used = 2 m;
+    print(used);
+    return;
+    print("never printed");
+}

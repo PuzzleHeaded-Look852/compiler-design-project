@@ -1,0 +1,3 @@
+// Runaway recursion is a clean Lumen error, not a crash.
+fn down(n: int) -> int { return down(n + 1); }
+fn main() { print(down(0)); }

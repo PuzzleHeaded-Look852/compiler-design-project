@@ -1,0 +1,15 @@
+// Money gets its own dimensions. INR and USD never mix without an explicit rate.
+unit INR;
+unit USD;
+
+fn main() {
+    let price = 250 USD;
+    let rate = 83.5 INR/USD;          // an exchange rate has its own unit
+    let in_rupees = price * rate;     // USD * INR/USD = INR
+    print(in_rupees);
+    let budget = 20000 INR;
+    if (in_rupees < budget) {
+        print("within budget");
+    }
+    print(budget / rate);             // INR / (INR/USD) = USD
+}

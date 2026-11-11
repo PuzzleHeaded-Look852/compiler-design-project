@@ -1,0 +1,15 @@
+// GIMLI GLIDER (1983): the fuel bug, rejected at compile time.
+// Fuel density was entered as 1.77 (pounds per litre) where kilograms per litre was needed.
+unit L = 0.001 m^3;
+unit lb = 0.45359237 kg;
+
+fn fuel_mass(volume: L, density: kg/L) -> kg {
+    return volume * density;
+}
+
+fn main() {
+    let dripstick = 7682 L;
+    let density = 1.77 lb/L;            // pounds per litre
+    let kilograms = fuel_mass(dripstick, 1.77);   // bare number: which unit?
+    print(kilograms);
+}

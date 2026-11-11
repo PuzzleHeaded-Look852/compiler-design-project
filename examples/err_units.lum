@@ -1,0 +1,15 @@
+// Five different unit mistakes in one program.
+unit h = 3600 s;
+
+fn speed(d: m, t: s) -> m/s { return d / t; }
+
+fn main() {
+    let race = 100 m;
+    let t = 9.58 s;
+    let v: m/s = race;                 // length where speed is wanted
+    let bad = race + t;                // metres plus seconds
+    let w = speed(race, 5);            // bare number for a time
+    let q = race in s;                 // not convertible
+    let z = 5 mtr;                     // misspelled unit
+    if (race > t) { print(1); }        // comparing length with time
+}

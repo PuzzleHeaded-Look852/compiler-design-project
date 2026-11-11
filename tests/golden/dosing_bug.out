@@ -1,0 +1,19 @@
+exit code: 1
+--- stdout ---
+--- stderr ---
+examples/dosing_bug.lum:12:32: error: argument 2 of 'pump_rate': expected rate per time (mcg/(kg*min)), found an int
+   12 |     let a = pump_rate(patient, 5);            // 5 of what?
+      |                                ^
+      = help: if the number really is in mcg/(kg*min), say so: `5 * 1 mcg/(kg*min)`; or write the literal with its unit (e.g. `4 mcg/(kg*min)`)
+
+examples/dosing_bug.lum:14:23: error: argument 1 of 'pump_rate': expected mass (kg), found time (s)
+   14 |     let c = pump_rate(5 s, 5 mcg/kg/min);     // a time is not a body weight
+      |                       ^~~
+      = help: a mass is a time * mass flow rate: try `5 s * b`
+
+examples/dosing_bug.lum:15:19: error: dimension mismatch: cannot add time (s) to mass flow rate (mg/h)
+   15 |     let total = b + 5 s;                      // a mass flow plus a time
+      |                   ^
+      = help: '+' needs the same dimension on both sides. To combine different dimensions use `/` (would give mass/time^2) or `*` (would give mass)
+
+3 errors generated.

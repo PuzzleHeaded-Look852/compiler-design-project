@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumen Playground</title>
+<style>
+  :root{
+    --bg:#f4f1ea; --card:#ffffff; --ink:#1d2433; --muted:#6b7385; --line:#e3ded2;
+    --accent:#d9930d; --accent-d:#b5780a; --navy:#16213a;
+    --code-bg:#14192b; --code-ink:#e6e9f2; --good:#2f9e6e; --bad:#e5484d; --warn:#d9930d;
+    --kw:#f0b429; --num:#7cc4ff; --cmt:#7d869c; --unit:#6ee0b0; --str:#f19a7d;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  code,pre,textarea,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  header{background:var(--navy);color:#fff;padding:14px 28px;display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+  header h1{margin:0;font-size:22px;letter-spacing:.3px}
+  header h1 span{color:var(--accent)}
+  header .tag{color:#aab3c8;font-size:14px;flex:1;min-width:200px}
+  header nav a{color:#dfe5f3;text-decoration:none;margin-left:18px;font-size:14px}
+  header nav a:hover{color:var(--accent)}
+  main{max-width:1380px;margin:0 auto;padding:22px 28px 60px}
+  h2{font-size:20px;margin:42px 0 6px}
+  .sub{color:var(--muted);margin:0 0 16px}
+
+  /* pipeline */
+  .pipe{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .chip{padding:6px 12px;border-radius:999px;background:#e9e4d8;color:#7a7f8d;font-size:13px;border:1px solid transparent;transition:.2s}
+  .chip.ok{background:#dff3ea;color:#1c7a53;border-color:#b6e2cf}
+  .chip.fail{background:#fde4e5;color:#b3282d;border-color:#f5b9bb;font-weight:600}
+  .arrow{color:#b9b3a3;font-size:13px}
+
+  .play{display:grid;grid-template-columns:230px minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+  .panel>h3{margin:0;padding:10px 14px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);border-bottom:1px solid var(--line);background:#faf8f3;display:flex;align-items:center;gap:10px}
+  .panel>h3 .grow{flex:1}
+
+  /* example list */
+  .list{overflow:auto;max-height:640px;padding:6px 6px 10px}
+  .grp{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:12px 8px 4px}
+  .ex{display:block;width:100%;text-align:left;border:0;background:none;padding:7px 10px;border-radius:7px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer}
+  .ex:hover{background:#f3efe4}
+  .ex.on{background:var(--navy);color:#fff}
+  .ex.bad-ex:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);margin-right:8px}
+  .ex.good-ex:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--good);margin-right:8px}
+  .ex.blank{border:1px dashed #c9c2b0;margin-top:10px;font-weight:600}
+  .ex.blank.on{border-style:solid}
+
+  /* editor */
+  .note{padding:9px 14px;font-size:13.5px;color:#4a5164;background:#fff8e6;border-bottom:1px solid #f1e3b5;min-height:38px}
+  .editor{position:relative;flex:1;min-height:440px;background:var(--code-bg)}
+  .editor pre,.editor textarea{position:absolute;inset:0;margin:0;padding:14px 14px 14px 52px;font-size:14px;line-height:1.55;tab-size:4;white-space:pre;overflow:auto;border:0;outline:0}
+  .editor pre{color:var(--code-ink);pointer-events:none}
+  .editor textarea{background:transparent;color:transparent;caret-color:#fff;resize:none}
+  .editor textarea::selection{background:#3b4a7a99;color:transparent}
+  .gutter{position:absolute;left:0;top:0;bottom:0;width:40px;padding:14px 8px 14px 0;text-align:right;color:#4d566e;font-size:14px;line-height:1.55;background:#10152a;overflow:hidden;user-select:none;white-space:pre}
+  .k{color:var(--kw);font-weight:600}.n{color:var(--num)}.c{color:var(--cmt);font-style:italic}.u{color:var(--unit)}.s{color:var(--str)}
+  .bar{display:flex;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);background:#faf8f3;flex-wrap:wrap}
+  button.run{background:var(--accent);color:#1b1500;border:0;font-weight:700;font-size:15px;padding:9px 22px;border-radius:8px;cursor:pointer}
+  button.run:hover{background:#ecab2a}
+  button.sec{background:#fff;border:1px solid var(--line);padding:8px 14px;border-radius:8px;cursor:pointer;font:inherit;font-size:14px}
+  button.sec:hover{border-color:#bdb59f}
+  label.opt{font-size:14px;color:#4a5164;display:flex;gap:6px;align-items:center;cursor:pointer}
+  .hint{color:var(--muted);font-size:12.5px;margin-left:auto}
+
+  /* output */
+  .tabs{display:flex;gap:2px;padding:6px 8px 0;background:#faf8f3;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .tab{border:0;background:none;padding:8px 12px;font:inherit;font-size:13.5px;color:var(--muted);cursor:pointer;border-radius:7px 7px 0 0}
+  .tab:hover{color:var(--ink)}
+  .tab.on{background:var(--code-bg);color:#fff}
+  .out{flex:1;min-height:440px;background:var(--code-bg);color:var(--code-ink);margin:0;padding:14px 16px;font-size:13.5px;line-height:1.55;overflow:auto;white-space:pre-wrap;word-break:break-word}
+  .out .e{color:#ff7b80}.out .w{color:#f0b429}.out .h{color:#f0b429}.out .good{color:#6ee0b0}.out .dim{color:#7d869c}
+  .status{padding:9px 14px;border-top:1px solid var(--line);font-size:13.5px;background:#faf8f3;display:flex;gap:14px;flex-wrap:wrap}
+  .status b.ok{color:var(--good)}.status b.bad{color:var(--bad)}
+
+  /* gallery */
+  .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:18px}
+  .shot{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .shot img{display:block;width:100%;cursor:zoom-in;border-bottom:1px solid var(--line)}
+  .shot figcaption{padding:10px 14px;font-size:14px}
+  .shot figcaption b{display:block}
+  .shot figcaption span{color:var(--muted);font-size:13px}
+  .empty{color:var(--muted);padding:20px;border:1px dashed var(--line);border-radius:10px}
+  #lightbox{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;padding:30px;z-index:9;cursor:zoom-out}
+  #lightbox img{max-width:100%;max-height:100%;border-radius:8px}
+
+  /* team */
+  .team{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+  .person{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .person .av{width:42px;height:42px;border-radius:50%;background:var(--accent);color:#1b1500;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+  .person h4{margin:0;font-size:17px}
+  .person .id{color:var(--muted);font-size:13px;margin-bottom:8px}
+  .person .part{font-weight:600;margin:6px 0 4px}
+  .person ul{margin:6px 0;padding-left:18px;font-size:14px}
+  .person .files{font-size:12.5px;color:#4a5164;background:#f4f1ea;padding:6px 8px;border-radius:6px;margin:8px 0}
+  .person .demo{font-size:12.5px;background:var(--code-bg);color:#bfe9d6;padding:7px 9px;border-radius:6px;overflow:auto;white-space:nowrap}
+  footer{text-align:center;color:var(--muted);font-size:13px;padding:30px}
+
+  /* shot mode: only the playground, used when taking the screenshots */
+  body.shot header,body.shot h2,body.shot .sub,body.shot #gallery,body.shot #teamsec,body.shot footer,body.shot .list-col{display:none}
+  body.shot .play{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  body.shot main{padding:14px}
+  body.shot .editor,body.shot .out{min-height:380px}
+  body.shot.tall .out{overflow:visible}
+  body.panel .play>.panel:not(:last-child),body.panel #pipe{display:none}
+  body.panel .play{grid-template-columns:1fr}
+  body.panel .out{min-height:100px;font-size:14px}
+  body.panel .tabs,body.panel .play>.panel>h3{display:none}
+
+  @media (max-width:1100px){.play{grid-template-columns:1fr}.list{max-height:240px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lumen <span>Playground</span></h1>
+  <div class="tag">A language where every number knows its unit &middot; Compiler Design (BCSE307L)</div>
+  <nav><a href="#play">Compiler</a><a href="#gallery">Screenshots</a></nav>
+</header>
+
+<main>
+  <h2 id="play" style="margin-top:6px">Try it</h2>
+  <p class="sub">Pick an example on the left and press Run. Every tab on the right is real output from the compiler, phase by phase. The last item in the list is a blank editor for your own code.</p>
+
+  <div class="pipe" id="pipe"></div>
+
+  <div class="play">
+    <div class="panel list-col"><h3>Examples</h3><div class="list" id="list"></div></div>
+
+    <div class="panel">
+      <h3><span class="grow" id="fname">travel_time.lum</span><span class="mono" style="text-transform:none;letter-spacing:0">Lumen</span></h3>
+      <div class="note" id="note"></div>
+      <div class="editor">
+        <div class="gutter" id="gutter"></div>
+        <pre id="hl" aria-hidden="true"></pre>
+        <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+      </div>
+      <div class="bar">
+        <button class="run" id="run">&#9654; Run</button>
+        <button class="sec" id="reset">Reset example</button>
+        <label class="opt"><input type="checkbox" id="opt" checked> optimizer</label>
+        <span class="hint">Ctrl / Cmd + Enter to run</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Compiler output</h3>
+      <div class="tabs" id="tabs"></div>
+      <pre class="out" id="out"></pre>
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+  <section id="gallery">
+    <h2>Screenshots of the output</h2>
+    <p class="sub">Captured from this same page running the real compiler. Click any image to enlarge.</p>
+    <div class="gal" id="gal"></div>
+  </section>
+
+</main>
+<footer>Lumen &middot; Sanjay Suresh, Sugesh Kumar, Noel Ninan, Advaith Sivakumar, Ajay Kumar</footer>
+<div id="lightbox"><img alt=""></div>
+
+<script>
+const TABS=[["out","Output"],["tokens","Tokens"],["ast","Typed AST"],["ir","IR"],["ir_opt","Optimized IR"],["bytecode","Bytecode"],["units","Units"],["stats","Stats"]];
+const PHASES=[["lexer","Lexer"],["parser","Parser"],["checker","Unit checker"],["irgen","IR"],["optimizer","Optimizer"],["codegen","Bytecode"],["runtime","VM"]];
+
+const SHOTS=[
+  {f:"01_travel_time.png",t:"Road trip: mixed units",d:"km/min and h are converted automatically; the output keeps the right unit."},
+  {f:"02_mars_bug.png",t:"Mars Orbiter: rejected",d:"A bare 12.5 where N*s was needed is a compile error, with a fix suggested."},
+  {f:"03_mars_fixed.png",t:"Mars Orbiter: fixed",d:"12.5 lbf*s is converted to 55.6 N*s exactly."},
+  {f:"04_gimli_bug.png",t:"Gimli Glider: rejected",d:"1.77 passed as kg/L is refused at compile time."},
+  {f:"05_err_units.png",t:"Several unit errors in one run",d:"Metres plus seconds, a wrong unit, a misspelt unit."},
+  {f:"06_tokens.png",t:"Phase 1: tokens",d:"The lexer output for the same program, with line:column."},
+  {f:"07_ast.png",t:"Phase 3: typed syntax tree",d:"Every node carries its unit; Convert nodes are inserted by the checker."},
+  {f:"08_optimizer.png",t:"Phase 5: optimizer",d:"Optimized IR: 20 instructions shrink to 6."},
+  {f:"09_bytecode.png",t:"Phase 6: bytecode",d:"Plain stack opcodes. No unit logic anywhere in the back end."},
+  {f:"10_zero_cost.png",t:"Zero runtime cost",d:"The whole program becomes print 36.0 km/h."}
+];
+
+let EX=[],BLANK="",cur=null,tab="out",last=null,isBlank=false;
+const $=id=>document.getElementById(id);
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+/* syntax highlighting (overlay under the textarea) */
+const KW=/^(fn|let|unit|if|else|while|return|print|in|true|false|int|float|bool|string)$/;
+function highlight(src){
+  let out="",i=0,prevNum=false;
+  const re=/\/\/[^\n]*|"(?:[^"\\\n]|\\.)*"|\d+(?:\.\d+)?|[A-Za-z_][A-Za-z_0-9]*|\s+|./gs;
+  let m;
+  while((m=re.exec(src))){
+    const t=m[0];
+    if(t.startsWith("//")){out+=`<span class="c">${esc(t)}</span>`;continue}
+    if(t[0]=='"'){out+=`<span class="s">${esc(t)}</span>`;prevNum=false;continue}
+    if(/^\d/.test(t)){out+=`<span class="n">${t}</span>`;prevNum=true;continue}
+    if(/^[A-Za-z_]/.test(t)){
+      if(prevNum&&!KW.test(t)){out+=`<span class="u">${t}</span>`}
+      else if(KW.test(t)){out+=`<span class="k">${t}</span>`}
+      else out+=esc(t);
+      prevNum=false;continue}
+    if(/^\s+$/.test(t)){out+=t;continue}
+    out+=esc(t);prevNum=false;
+  }
+  return out+"\n";
+}
+function paint(){
+  const v=$("src").value;
+  $("hl").innerHTML=highlight(v);
+  const n=v.split("\n").length;
+  $("gutter").textContent=Array.from({length:n},(_,i)=>i+1).join("\n");
+  syncScroll();
+}
+function syncScroll(){
+  const t=$("src");$("hl").scrollTop=t.scrollTop;$("hl").scrollLeft=t.scrollLeft;$("gutter").scrollTop=t.scrollTop;
+}
+
+/* sidebar */
+function buildList(){
+  const L=$("list");L.innerHTML="";
+  let g="";
+  EX.forEach(e=>{
+    if(e.group!==g){g=e.group;const d=document.createElement("div");d.className="grp";d.textContent=g;L.appendChild(d)}
+    const b=document.createElement("button");
+    const bad=/_bug$|^err_/.test(e.id);
+    b.className="ex "+(bad?"bad-ex":"good-ex");b.textContent=e.title;b.dataset.id=e.id;
+    b.onclick=()=>pick(e.id);L.appendChild(b);
+  });
+  const d=document.createElement("div");d.className="grp";d.textContent="Your turn";L.appendChild(d);
+  const b=document.createElement("button");b.className="ex blank";b.dataset.id="__blank";b.textContent="Blank compiler";b.onclick=()=>pick("__blank");L.appendChild(b);
+}
+function mark(id){document.querySelectorAll(".ex").forEach(b=>b.classList.toggle("on",b.dataset.id===id))}
+
+function pick(id,run=true){
+  cur=id;isBlank=id==="__blank";mark(id);
+  if(isBlank){
+    $("fname").textContent="blank.lum";
+    $("note").textContent="Empty workspace: write any Lumen program. Try adding a unit mistake on purpose, like 5 m + 3 s.";
+    $("src").value=BLANK;
+  }else{
+    const e=EX.find(x=>x.id===id);
+    $("fname").textContent=e.id+".lum";$("note").textContent=e.note;$("src").value=e.source;
+  }
+  paint();
+  if(run)runIt();else{clearOut()}
+}
+function clearOut(){last=null;setPipe(null);render()}
+
+/* pipeline strip */
+function setPipe(res){
+  const p=$("pipe");p.innerHTML="";
+  let failIdx=-1;
+  if(res&&!res.ok){
+    const fp=({semantic:"checker"})[res.fail_phase]||res.fail_phase||"checker";
+    failIdx=PHASES.findIndex(x=>x[0]===fp);
+    if(failIdx<0)failIdx=2;
+  }
+  PHASES.forEach((ph,i)=>{
+    const c=document.createElement("span");c.className="chip";c.textContent=ph[1];
+    if(res){
+      if(failIdx<0)c.classList.add("ok");
+      else if(i<failIdx)c.classList.add("ok");
+      else if(i===failIdx)c.classList.add("fail");
+    }
+    p.appendChild(c);
+    if(i<PHASES.length-1){const a=document.createElement("span");a.className="arrow";a.textContent="→";p.appendChild(a)}
+  });
+}
+
+/* tabs and output */
+function buildTabs(){
+  const T=$("tabs");T.innerHTML="";
+  TABS.forEach(([k,l])=>{const b=document.createElement("button");b.className="tab"+(k===tab?" on":"");b.textContent=l;b.dataset.k=k;b.onclick=()=>{tab=k;render()};T.appendChild(b)});
+}
+function colour(text){
+  return esc(text)
+    .replace(/^(.*?): (error)(: .*)$/gm,'$1: <span class="e">$2</span>$3')
+    .replace(/^(.*?): (warning)(: .*)$/gm,'$1: <span class="w">$2</span>$3')
+    .replace(/^(.*runtime error)(: .*)$/gm,'<span class="e">$1</span>$2')
+    .replace(/(= help:.*)$/gm,'<span class="h">$1</span>')
+    .replace(/(\^~*)/g,'<span class="e">$1</span>');
+}
+function render(){
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("on",b.dataset.k===tab));
+  const o=$("out");
+  if(!last){o.innerHTML='<span class="dim">Press Run to compile this program.</span>';$("status").innerHTML="";return}
+  let html="";
+  if(tab==="out"){
+    if(last.warnings)html+=colour(last.warnings)+"\n\n";
+    if(last.stdout)html+=`<span class="good">${esc(last.stdout)}</span>`;
+    if(last.diagnostics)html+=(last.stdout?"\n":"")+colour(last.diagnostics);
+    if(!html)html='<span class="dim">(no output)</span>';
+  }else{
+    const v=last[tab];
+    html=v?esc(v):`<span class="dim">Nothing here: compilation stopped before this phase.</span>`;
+  }
+  o.innerHTML=html;
+  const s=$("status");
+  const ok=last.ok;
+  const word={0:"ran fine",1:"compile error",3:"runtime error",2:"server error"}[last.exit]||"";
+  s.innerHTML=`<span>exit code <b class="${ok?"ok":"bad"}">${last.exit}</b></span><span>${word}</span><span>${last.ms} ms</span>`;
+}
+
+async function runIt(){
+  const btn=$("run");btn.disabled=true;
+  const t0=performance.now();
+  try{
+    const r=await fetch("/api/compile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:$("src").value,optimize:$("opt").checked})});
+    last=await r.json();
+  }catch(e){last={ok:false,exit:2,diagnostics:"Cannot reach the server. Start it with: python3 playground/server.py",stdout:""}}
+  last.ms=Math.round(performance.now()-t0);
+  btn.disabled=false;setPipe(last);render();
+}
+
+/* gallery and team */
+function buildGallery(){
+  const g=$("gal");
+  const rows=SHOTS.map(s=>`<figure class="shot" style="margin:0"><img src="shots/${s.f}" alt="${esc(s.t)}" loading="lazy" onerror="this.closest('figure').style.display='none'"><figcaption><b>${esc(s.t)}</b><span>${esc(s.d)}</span></figcaption></figure>`).join("");
+  g.innerHTML=rows;
+}
+
+/* wiring */
+$("src").addEventListener("input",()=>{paint()});
+$("src").addEventListener("scroll",syncScroll);
+$("src").addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();runIt()}
+  if(e.key==="Tab"){e.preventDefault();const t=e.target,s=t.selectionStart;t.value=t.value.slice(0,s)+"    "+t.value.slice(t.selectionEnd);t.selectionStart=t.selectionEnd=s+4;paint()}
+});
+$("run").onclick=runIt;
+$("reset").onclick=()=>pick(cur,false);
+$("opt").onchange=()=>{if(last)runIt()};
+document.addEventListener("click",e=>{
+  const im=e.target.closest(".shot img");
+  if(im){$("lightbox").firstElementChild.src=im.src;$("lightbox").style.display="flex"}
+  else if(e.target.closest("#lightbox"))$("lightbox").style.display="none";
+});
+
+(async function init(){
+  buildTabs();buildGallery();setPipe(null);
+  const q=new URLSearchParams(location.search);
+  if(q.get("shot"))document.body.classList.add("shot");
+  if(q.get("panel"))document.body.classList.add("panel");
+  if(q.get("tall"))document.body.classList.add("tall");
+  const d=await (await fetch("/api/examples")).json();
+  EX=d.examples;BLANK=d.blank;buildList();
+  if(q.get("tab"))tab=q.get("tab");
+  buildTabs();
+  pick(q.get("ex")||"travel_time",true);
+})();
+</script>
+</body>
+</html>

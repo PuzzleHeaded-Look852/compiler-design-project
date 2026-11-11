@@ -1,0 +1,16 @@
+// Block scoping and shadowing.
+fn main() {
+    let x = 1;
+    {
+        let x = 100;          // a different x, only inside the braces
+        print(x);
+    }
+    print(x);
+    let total = 0 m;
+    let i = 0;
+    while (i < 4) {
+        total = total + 2.5 m;
+        i = i + 1;
+    }
+    print(total);
+}

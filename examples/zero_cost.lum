@@ -1,0 +1,7 @@
+// Units cost nothing at run time: this whole program compiles to "v = 36.0".
+unit h = 3600 s;
+
+fn main() {
+    let v: km/h = 10 m/s;
+    print(v);
+}
