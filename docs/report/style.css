@@ -1,0 +1,68 @@
+/* Shared style for the Lumen case-study report (A4, Times, academic layout). */
+@page {
+  size: A4;
+  margin: 24mm 24mm 22mm 24mm;
+  @top-left {
+    content: "Lumen: A Case Study in Unit-Aware Compilation and Compile-Time Dimensional Analysis";
+    font: italic 8.5pt "Times New Roman", Times, serif;
+    vertical-align: bottom;
+    padding-bottom: 3mm;
+    border-bottom: 0.6pt solid #000;
+    width: 100%;
+  }
+  @bottom-left {
+    content: "Compiler Design Case Study";
+    font: 9.5pt "Times New Roman", Times, serif;
+    vertical-align: top;
+    padding-top: 2mm;
+    border-top: 0.6pt solid #000;
+  }
+  @bottom-right {
+    content: "Page " counter(page);
+    font: 9.5pt "Times New Roman", Times, serif;
+    vertical-align: top;
+    padding-top: 2mm;
+    border-top: 0.6pt solid #000;
+  }
+}
+@page roman { @bottom-right { content: "Page " counter(page, lower-roman); } }
+@page cover {
+  @top-left { content: none; border: none; }
+  @bottom-left { content: none; border: none; }
+  @bottom-right { content: none; border: none; }
+}
+
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.45; color: #000; margin: 0; }
+p { text-align: justify; margin: 0 0 8pt; hyphens: auto; }
+h1 { font-size: 17pt; font-weight: bold; margin: 18pt 0 10pt; padding-bottom: 3pt; border-bottom: 1.2pt solid #000; break-after: avoid; }
+h1.page { break-before: page; margin-top: 0; }
+h2 { font-size: 13pt; font-weight: bold; margin: 12pt 0 4pt; break-after: avoid; }
+ul, ol { margin: 2pt 0 8pt 22pt; padding: 0; }
+li { margin: 0 0 3pt; text-align: justify; }
+code, .mono { font-family: "Courier New", Courier, monospace; font-size: 10pt; }
+.small { font-size: 10pt; }
+
+/* tables: black header row like the reference report */
+.caption { text-align: center; font-size: 11pt; margin: 10pt 0 4pt; break-after: avoid; }
+.caption b { font-weight: bold; }
+.caption i { font-style: italic; }
+table { width: 100%; border-collapse: collapse; margin: 0 0 10pt; font-size: 10.5pt; line-height: 1.3; }
+th { background: #000; color: #fff; font-weight: bold; text-align: left; padding: 4pt 6pt; }
+td { border: 0.6pt solid #000; padding: 4pt 6pt; vertical-align: top; }
+td.c, th.c { text-align: center; }
+td.b { font-weight: bold; }
+tr { break-inside: avoid; }
+
+/* code listings: plain boxed, like the reference */
+pre { font-family: "Courier New", Courier, monospace; font-size: 8.8pt; line-height: 1.3; border: 0.8pt solid #000;
+      padding: 7pt 9pt; margin: 6pt 0 10pt; white-space: pre; break-inside: avoid; }
+
+figure { margin: 10pt 0 12pt; text-align: center; break-inside: avoid; }
+figure svg { max-width: 100%; height: auto; }
+figcaption { font-size: 11pt; margin-top: 4pt; }
+figcaption b { font-weight: bold; }
+.figtitle { font-weight: bold; font-size: 13pt; margin-bottom: 6pt; }
+.fignote { font-style: italic; font-size: 9.5pt; margin-top: 3pt; }
+.keep { break-inside: avoid; }

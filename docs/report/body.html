@@ -1,0 +1,834 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Lumen Case Study</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  svg text { font-family: "Times New Roman", Times, serif; }
+  svg .mono { font-family: "Courier New", Courier, monospace; }
+</style>
+</head>
+<body>
+
+<h1 style="margin-top:0">1. Introduction</h1>
+
+<h2>1.1 Background</h2>
+<p>Every programming language a student learns treats a number as just a number. To <code>int</code> and <code>float</code>,
+five metres, five seconds and five kilograms are the same value: 5. The program is allowed to add them, compare them, or pass a
+time where a distance was expected, and nothing complains until the answer is wrong. The unit lives only in a variable name or a
+comment, and the compiler never reads either.</p>
+<p>This is a real engineering problem, not a classroom one. NASA lost the Mars Climate Orbiter in 1999 because one program
+produced thruster impulse in pound-force seconds and another read the same numbers as newton seconds, an error of a factor of 4.45
+[7]. In 1983 an Air Canada Boeing 767 ran out of fuel in flight because a conversion factor in pounds per litre was used where
+kilograms per litre was needed [8]. In both cases every value had the right type as far as the software could tell. Only its
+unit was wrong, and no type checker was looking at units.</p>
+
+<h2>1.2 Project Overview</h2>
+<p>Lumen is a small, statically typed programming language in which <b>every number carries its unit</b>. <code>9.8 m/s^2</code>,
+<code>12.5 lbf*s</code> and <code>250 USD</code> are values of different types. We also wrote the complete compiler for it in
+Python, by hand, with no parser generators and no third-party libraries apart from pytest for testing. The compiler is
+3,437 lines of Python in 16 modules.</p>
+<p>The compiler works in seven phases. The first three understand the program: a <b>lexer</b>, a recursive-descent <b>parser</b> and
+a <b>unit and type checker</b> that works out the dimension of every expression, converts compatible units exactly and rejects
+incompatible ones with a precise message. After that the units are <b>erased</b>. The last four phases (three-address code, an
+optimizer, a bytecode generator and a stack-based virtual machine) see only plain numbers, so the checking costs nothing while the
+program runs.</p>
+
+<h2>1.3 Purpose and Organization of This Case Study</h2>
+<p>This case study describes the problem Lumen addresses, the language, the seven phases of the compiler, the way it was tested,
+and what it measured. It also states plainly where the design stops. Sections 2 to 4 cover the problem and background. Sections 5
+to 9 describe the design and the implementation. Sections 10 and 11 cover testing and measurement. Sections 12 to 15 discuss
+contributions, limitations, future work and conclusions.</p>
+<p>Every technical statement in this report was checked against the source code, and every program output shown was produced by
+running the compiler. Where the project's own documents say more than the code shows, the code is treated as correct and the
+difference is recorded in Section 13.</p>
+
+<h1>2. Problem Statement</h1>
+<p>Four weaknesses of ordinary languages and tools motivated the project. Each one is a design problem, not just a missing
+feature.</p>
+
+<h2>2.1 Numbers Without Units</h2>
+<p>A type system that only knows <code>int</code> and <code>float</code> cannot tell length from time. The expression
+<code>distance + time</code> is as meaningless as adding a word to a number, but it compiles in C, Java, Python and Go. Unit
+errors are therefore found by testing or by accident, never by the compiler, even though they are exactly the kind of mistake a
+type checker exists to catch.</p>
+
+<h2>2.2 Silent Conversion Errors</h2>
+<p>Even when programmers know the units, they convert them by hand: multiply by 1000, divide by 3600, multiply by 4.448. Each hand
+conversion is a chance to use the wrong factor, apply it twice, or forget it. The Mars and Gimli failures were both conversion
+errors. In medicine the same mistake appears as microgram/milligram confusion; one hospital study found it to be the most common
+medication-error type, in 34.8% of the patients studied [9]. Everyday software has small versions of the same bug: a timeout set in
+milliseconds where seconds were meant, or MB/s confused with Mbit/s (a factor of 8).</p>
+
+<h2>2.3 Unit Libraries Are Rarely Used</h2>
+<p>Libraries that attach units to numbers exist for most languages, but practitioners avoid them. A 2022 study of the area
+reports that developers find them inconvenient: extra syntax, poor interaction with the rest of the program, performance costs,
+and in some cases checking only at run time [3]. The same study argues that a solution built into the language works better than
+a library added on top.</p>
+
+<h2>2.4 Engineering Question</h2>
+<p>Can a small language make units part of the type of every number, check them completely at compile time, convert between
+compatible units exactly, give error messages a student can act on, and still produce a running program that contains no unit
+logic at all? Lumen is the attempt to answer that question, built so that each phase also illustrates a topic of the Compiler
+Design syllabus.</p>
+
+<h1>3. Objectives and Scope</h1>
+<h2>3.1 Objectives</h2>
+<ol>
+<li>Design a small, C-like, statically typed language in which a number literal can carry a unit, and units can appear as types
+of variables, parameters and function results.</li>
+<li>Check the dimension of every expression at compile time using dimension algebra: multiplication adds dimension exponents,
+division subtracts them, and addition requires them to be equal.</li>
+<li>Convert between units of the same dimension automatically and <b>exactly</b>, using rational arithmetic rather than rounded
+decimals.</li>
+<li>Erase units after checking, so the intermediate code, the bytecode and the virtual machine contain no unit logic.</li>
+<li>Report every lexical, syntax, unit and runtime error with a line, a column, a caret under the problem and a suggested fix,
+never a Python traceback.</li>
+<li>Make every phase visible through a command-line flag, and verify the system with an automated test suite.</li>
+</ol>
+<h2>3.2 In Scope</h2>
+<ul>
+<li>A hand-written lexer and recursive-descent parser, with error recovery so that one run reports several errors.</li>
+<li>Base units <code>m</code>, <code>kg</code>, <code>s</code> and <code>bit</code>, SI prefixes, user-declared units
+(<code>unit h = 3600 s;</code>) and user-declared base dimensions such as currencies (<code>unit INR;</code>).</li>
+<li>A unit and type checker that inserts explicit conversion nodes, and a three-address code generator, optimizer, bytecode
+generator and stack virtual machine.</li>
+<li>34 example programs, including the Mars Climate Orbiter and Gimli Glider bugs written in Lumen, with recorded expected
+outputs.</li>
+<li>A small local web playground that runs the compiler and shows the output of each phase.</li>
+</ul>
+<h2>3.3 Out of Scope</h2>
+<ul>
+<li>Checking units across separate programs or files. Lumen checks one program at a time (Section 13).</li>
+<li>Offset units such as degrees Celsius and Fahrenheit, which need more than a scale factor.</li>
+<li>Arrays, structures, pointers, modules, and a native machine-code back end.</li>
+</ul>
+
+<h1>4. Background and Related Work</h1>
+<h2>4.1 Compiler Phases</h2>
+<p>The classical structure of a compiler splits the work into lexical analysis, syntax analysis, semantic analysis, intermediate
+code generation, optimization and target code generation [1]. The lexer turns characters into tokens. The parser checks the
+tokens against a grammar and builds a tree. Semantic analysis checks meaning, such as whether names are declared and types agree.
+The intermediate code generator lowers the tree to a machine-independent form such as three-address code, which the optimizer
+improves before the code generator produces the target. Lumen follows this structure exactly, with a virtual machine as the
+target.</p>
+<h2>4.2 Dimensional Analysis</h2>
+<p>Physicists check equations by their dimensions: a speed is a length divided by a time, so any formula for a speed must reduce
+to length<sup>1</sup>·time<sup>-1</sup>. A dimension can be written as a vector of integer exponents over a set of base
+dimensions. Multiplying two quantities adds their vectors, dividing subtracts them, and raising to a power multiplies the vector.
+Two quantities can only be added or compared if their vectors are equal. A <b>unit</b> is a dimension plus a <b>scale</b>: a
+kilometre is a length with scale 1000 relative to the metre. Kennedy showed how these rules fit inside a type system [2], and
+F# ships them as a language feature [13].</p>
+<h2>4.3 Syntax-Directed Definitions</h2>
+<p>A syntax-directed definition attaches attributes to grammar symbols and gives rules for computing them [1]. When every
+attribute of a node is computed from the attributes of its children, the definition is <b>S-attributed</b> and can be evaluated
+in one bottom-up (post-order) walk of the tree. Lumen's checker is exactly this: the attribute is the type of each expression,
+made of a kind, a dimension and a scale, and each operator has a rule that computes the parent's type from its children's.</p>
+<h2>4.4 Related Approaches</h2>
+<p>Table 1 compares Lumen with existing ways of getting unit safety. The comparison is at the design level and is not a benchmark
+of those tools.</p>
+<div class="keep"><div class="caption"><b>Table 1:</b> <i>Design-level comparison of related approaches</i></div>
+<table>
+<tr><th style="width:21%">Approach</th><th style="width:22%">How units are provided</th><th style="width:17%">Checked when</th><th>Trade-off</th></tr>
+<tr><td>F# units of measure [13]</td><td>Built into a large functional language</td><td>Compile time</td><td>Mature and complete; units are one feature among many in a large language</td></tr>
+<tr><td>C++ mp-units [6]</td><td>Template library, proposed for the C++ standard</td><td>Compile time</td><td>No run-time cost; heavy template syntax and not yet standard</td></tr>
+<tr><td>Rust uom [11]</td><td>Library based on generics</td><td>Compile time</td><td>Type-safe; verbose types</td></tr>
+<tr><td>Python pint [12]</td><td>Library of quantity objects</td><td>Run time</td><td>Easy to use; errors found only when the line runs, and every operation is slower</td></tr>
+<tr><td>Frink [10]</td><td>Interpreted calculator language</td><td>Run time</td><td>Excellent unit tables; interpreted, not compiled</td></tr>
+<tr><td>Osprey (C) [4], Fortran units [5]</td><td>Research checkers added to existing languages</td><td>Compile time</td><td>Work on existing code; need annotations or inference on top of the language</td></tr>
+<tr><td><b>Lumen</b></td><td>Part of the type of every number in a small language</td><td>Compile time</td><td>Small and explainable, exact conversions, units erased before run time; much smaller language than the others</td></tr>
+</table></div>
+<p>The comparison shows the trade Lumen makes. It gives up breadth (no arrays, no modules, a Python virtual machine) to make
+units the centre of a language small enough for every line of its compiler to be explained.</p>
+
+<h1>5. System Architecture</h1>
+<h2>5.1 Overview</h2>
+<p>The compiler is a straight pipeline (Figure 1). Each phase takes the previous phase's output, does one job, and passes it on.
+A driver module, <code>compiler.py</code>, runs the phases in order and stops early when a phase reports errors: lexical errors
+stop the compiler before parsing, and syntax errors stop it before checking, because a damaged input only produces confusing
+follow-on errors. The dashed line in Figure 1 marks where units are erased.</p>
+
+<figure>
+<div class="figtitle">Lumen: Seven-Phase Compiler Pipeline</div>
+<svg viewBox="0 0 600 456" width="440">
+  <defs><marker id="ar" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#000"/></marker></defs>
+  <g font-size="14" text-anchor="middle">
+    <rect x="100" y="10" width="390" height="40" rx="5" fill="#000"/>
+    <text x="295" y="27" fill="#fff">Source program (.lum)</text>
+    <text x="295" y="43" fill="#fff" font-size="12">e.g. let v = 90 km / 1.5 h;</text>
+    <line x1="295" y1="50" x2="295" y2="62" stroke="#000" stroke-width="1.5" marker-end="url(#ar)"/>
+    <rect x="100" y="64" width="390" height="40" rx="5" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="295" y="81">Phase 1: Lexical analysis</text>
+    <text x="295" y="97" font-size="12">lexer.py  -&gt; tokens with line:column, exact Fraction numbers</text>
+    <line x1="295" y1="104" x2="295" y2="116" stroke="#000" stroke-width="1.5" marker-end="url(#ar)"/>
+    <rect x="100" y="118" width="390" height="40" rx="5" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="295" y="135">Phase 2: Syntax analysis</text>
+    <text x="295" y="151" font-size="12">parser.py  -&gt; abstract syntax tree, panic-mode recovery</text>
+    <line x1="295" y1="158" x2="295" y2="170" stroke="#000" stroke-width="1.5" marker-end="url(#ar)"/>
+    <rect x="100" y="172" width="390" height="40" rx="5" fill="#fff" stroke="#000" stroke-width="2.6"/>
+    <text x="295" y="189" font-weight="bold">Phase 3: Unit and type checking</text>
+    <text x="295" y="205" font-size="12">semantic.py + units.py  -&gt; typed AST with Convert nodes</text>
+    <line x1="295" y1="212" x2="295" y2="242" stroke="#000" stroke-width="1.5" marker-end="url(#ar)"/>
+    <rect x="100" y="244" width="390" height="40" rx="5" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="295" y="261">Phase 4: Intermediate code</text>
+    <text x="295" y="277" font-size="12">irgen.py + ir.py  -&gt; three-address code, labels and jumps</text>
+    <line x1="295" y1="284" x2="295" y2="296" stroke="#000" stroke-width="1.5" marker-end="url(#ar)"/>
+    <rect x="100" y="298" width="390" height="40" rx="5" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="295" y="315">Phase 5: Optimization</text>
+    <text x="295" y="331" font-size="12">optimizer.py  -&gt; folded, fused, dead code removed</text>
+    <line x1="295" y1="338" x2="295" y2="350" stroke="#000" stroke-width="1.5" marker-end="url(#ar)"/>
+    <rect x="100" y="352" width="390" height="40" rx="5" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="295" y="369">Phase 6: Code generation</text>
+    <text x="295" y="385" font-size="12">codegen.py  -&gt; stack bytecode, local slots, jump addresses</text>
+    <line x1="295" y1="392" x2="295" y2="404" stroke="#000" stroke-width="1.5" marker-end="url(#ar)"/>
+    <rect x="100" y="406" width="390" height="40" rx="5" fill="#000"/>
+    <text x="295" y="423" fill="#fff">Phase 7: Virtual machine</text>
+    <text x="295" y="439" fill="#fff" font-size="12">vm.py  -&gt; program output, runtime errors with line numbers</text>
+    <line x1="10" y1="228" x2="590" y2="228" stroke="#000" stroke-width="1.2" stroke-dasharray="6 4"/>
+    <text x="500" y="222" font-size="11" font-style="italic" text-anchor="start">&#9650; units checked</text>
+    <text x="500" y="242" font-size="11" font-style="italic" text-anchor="start">&#9660; units erased</text>
+  </g>
+</svg>
+<div class="fignote">Phases 1 to 3 understand the program and its units. Phases 4 to 7 work on plain numbers.</div>
+<figcaption><b>Figure 1:</b> <i>Architecture of the Lumen compiler</i></figcaption>
+</figure>
+
+<h2>5.2 Module Responsibilities</h2>
+<div class="caption"><b>Table 2:</b> <i>Source modules and their responsibilities (lines from <code>wc -l</code>)</i></div>
+<table>
+<tr><th style="width:24%">Module</th><th style="width:9%" class="c">Lines</th><th>Responsibility</th></tr>
+<tr><td>tokens.py</td><td class="c">114</td><td>Token types, the keyword table and the Token record (type, text, value, line, column).</td></tr>
+<tr><td>lexer.py</td><td class="c">194</td><td>Character-by-character scanner. Longest match, exact number values, all lexical errors collected.</td></tr>
+<tr><td>ast_nodes.py</td><td class="c">239</td><td>Data classes for every node of the syntax tree, including the Convert and Cast nodes the checker inserts.</td></tr>
+<tr><td>parser.py</td><td class="c">465</td><td>Recursive-descent parser, one method per grammar rule; the two unit rules; panic-mode error recovery.</td></tr>
+<tr><td>units.py</td><td class="c">214</td><td>Dimension algebra, the unit table, SI prefixes, unit names for messages and "did you mean" suggestions.</td></tr>
+<tr><td>semantic.py</td><td class="c">933</td><td>Unit and type checker: scopes, the typing rules, conversion insertion, return-path check, warnings.</td></tr>
+<tr><td>ir.py</td><td class="c">188</td><td>Three-address instruction set and the arithmetic shared by the optimizer and the virtual machine.</td></tr>
+<tr><td>irgen.py</td><td class="c">190</td><td>Lowers the checked tree to three-address code; short-circuit <code>&amp;&amp;</code> and <code>||</code>.</td></tr>
+<tr><td>optimizer.py</td><td class="c">298</td><td>Folding, propagation, conversion fusion, simplification, branch folding, dead-code elimination.</td></tr>
+<tr><td>codegen.py</td><td class="c">158</td><td>Three-address code to stack bytecode; local slots; absolute jump targets.</td></tr>
+<tr><td>vm.py</td><td class="c">156</td><td>Fetch-decode-execute loop with explicit call frames, a step limit and runtime errors.</td></tr>
+<tr><td>errors.py</td><td class="c">77</td><td>Diagnostic record and the caret-and-help rendering used by every phase.</td></tr>
+<tr><td>compiler.py</td><td class="c">87</td><td>Driver: runs the phases in order and keeps each phase's output.</td></tr>
+<tr><td>cli.py, __main__.py, __init__.py</td><td class="c">124</td><td>Command-line interface and phase flags.</td></tr>
+<tr><td class="b">Total</td><td class="c b">3,437</td><td>Pure Python 3.10+, no third-party dependencies.</td></tr>
+</table>
+
+<h2>5.3 Design Principles</h2>
+<ul>
+<li><b>Units never reach run time.</b> The code generator and virtual machine contain no unit logic; a unit conversion is
+already an ordinary multiplication when it reaches them.</li>
+<li><b>Scales are exact.</b> Conversion factors are Python <code>Fraction</code> values [14] until the last step, so converting
+km to m and back to km gives a factor of exactly 1.</li>
+<li><b>One arithmetic.</b> The optimizer and the virtual machine use the same function to evaluate operators, so an optimized
+program always prints the same result as the unoptimized one. Operations that can fail at run time, such as division by a value
+that might be zero, are never folded or deleted.</li>
+<li><b>Errors are collected, not thrown.</b> Every phase records problems and carries on. An expression with an error gets a
+special <code>error</code> type and stays silent afterwards, so one mistake produces one message, not a cascade.</li>
+<li><b>Conversion changes scale, never dimension.</b> km can become m automatically; a plain number never becomes a quantity, and
+a length never becomes a time.</li>
+</ul>
+
+<h2>5.4 Command-Line Interface</h2>
+<p>The compiler is run as <code>python -m lumen run file.lum</code>. Each flag in Table 3 prints one phase's output and stops,
+which is how every phase can be shown on its own during a demonstration.</p>
+<div class="keep"><div class="caption"><b>Table 3:</b> <i>Command-line flags and exit codes</i></div>
+<table>
+<tr><th style="width:26%">Flag</th><th>Shows</th></tr>
+<tr><td><code>--tokens</code></td><td>The token stream, with type, text and line:column.</td></tr>
+<tr><td><code>--ast</code></td><td>The syntax tree after checking, with the type of every expression and the inserted conversions.</td></tr>
+<tr><td><code>--ir</code>, <code>--ir-opt</code></td><td>Three-address code before and after optimization.</td></tr>
+<tr><td><code>--bytecode</code></td><td>The stack-machine code the virtual machine runs.</td></tr>
+<tr><td><code>--units</code></td><td>The unit table: built-in and declared units, their dimensions and scales.</td></tr>
+<tr><td><code>--stats</code>, <code>--no-opt</code></td><td>Optimizer and run statistics; or run without the optimizer.</td></tr>
+<tr><td>Exit codes</td><td>0 success, 1 compile error, 2 file cannot be read, 3 runtime error.</td></tr>
+</table></div>
+
+<h1>6. The Lumen Language</h1>
+<h2>6.1 A First Program</h2>
+<p>The program below shows most of the language. A number followed by a unit is a quantity. Units can be declared, can be used
+as types, and can be converted explicitly with <code>in</code>. The last line is rejected at compile time.</p>
+<pre>unit min = 60 s;                      // a unit declared from another
+unit h   = 3600 s;
+
+fn pace(d: km, t: min) -&gt; km/h {      // units as parameter and result types
+    return d / t;                     // km/min converted to km/h
+}
+
+fn main() {
+    let d = 42.195 km;
+    let t = 3 h + 30 min;             // mixed scales: t is in h
+    print(pace(d, t));                // 12.055714286 km/h
+    print(d in m);                    // explicit conversion: 42195.0 m
+    let x = d + 5 s;                  // ERROR: length + time
+}</pre>
+
+<h2>6.2 Lexical Rules and Grammar</h2>
+<p>Identifiers, numbers, strings, comments and operators follow C-like rules. The keywords are <code>fn let if else while return
+print true false unit in int float bool string</code>. A float needs digits on both sides of the dot, and every number keeps its
+exact value as a fraction, so <code>0.1</code> is exactly one tenth. The grammar, in EBNF, is:</p>
+<pre>program    = { unitDecl | function } EOF
+unitDecl   = "unit" IDENT ( ";" | "=" NUMBER unitExpr ";" )
+function   = "fn" IDENT "(" [ param { "," param } ] ")" [ "-&gt;" type ] block
+type       = "int" | "float" | "bool" | "string" | unitExpr
+unitExpr   = unitFactor { ( "*" | "/" ) unitFactor }
+unitFactor = ( IDENT | "(" unitExpr ")" ) [ "^" [ "-" ] INT ]
+statement  = let | assign | if | while | return | print | block | exprStmt
+expr       = logicOr [ "in" unitExpr ]
+logicOr    = logicAnd { "||" logicAnd }
+logicAnd   = equality { "&amp;&amp;" equality }
+equality   = comparison { ("=="|"!=") comparison }
+comparison = term { ("&lt;"|"&lt;="|"&gt;"|"&gt;=") term }
+term       = factor { ("+"|"-") factor }
+factor     = unary { ("*"|"/"|"%") unary }
+unary      = ("-"|"!") unary | power
+power      = primary [ "^" [ "-" ] INT ]
+primary    = NUMBER [ unitLiteral ] | STRING | "true" | "false"
+           | IDENT [ "(" [ expr { "," expr } ] ")" ] | "(" expr ")"</pre>
+<p>Precedence comes from the layering of the rules, and loops replace left recursion so the grammar stays LL(1). Units need two
+context rules, which are the most interesting parsing problem in the project. First, <b>a name directly after a number is a
+unit</b>: in <code>5 km</code>, <code>km</code> is a unit, and no other construct puts a name there. Second, <b>a unit literal
+continues over <code>*</code> or <code>/</code> only if the next name is a known unit</b>: <code>9.8 m/s^2</code> is one literal,
+but <code>10 m / t</code>, where <code>t</code> is a variable, is <code>(10 m) / t</code>. This is the same kind of problem as
+C's well-known typedef ambiguity, solved by consulting a table of known names during parsing.</p>
+
+<h2>6.3 Units and Dimensions</h2>
+<ul>
+<li><b>Dimension:</b> what kind of quantity a value is, stored as exponents over base units. Speed is m<sup>1</sup>·s<sup>-1</sup>.</li>
+<li><b>Unit:</b> a dimension plus an exact scale. <code>km</code> is length with scale 1000; <code>h</code> is time with scale 3600.</li>
+<li><b>Base units:</b> <code>m</code> (length), <code>kg</code> (mass), <code>s</code> (time), <code>bit</code> (data), and the
+built-in <code>g</code> = 1/1000 kg. SI prefixes <code>n u m c k M G</code> attach to <code>m s g bit</code>
+(<code>km</code>, <code>mg</code>, <code>ms</code>, <code>Mbit</code>).</li>
+<li><b>Declared units:</b> <code>unit lbf = 4.4482216152605 N;</code> defines a unit from existing ones.</li>
+<li><b>New base dimensions:</b> <code>unit INR;</code> creates a dimension of its own. INR and USD can never be added or converted
+by accident; a rate must be written with its own unit (<code>83.5 INR/USD</code>).</li>
+</ul>
+
+<h2>6.4 Typing Rules</h2>
+<p>Every expression has a type made of a <b>kind</b> (int, float, bool, string), a <b>dimension</b> and a <b>scale</b>. Table 4
+gives the rules the checker applies.</p>
+<div class="keep"><div class="caption"><b>Table 4:</b> <i>Unit typing rules</i></div>
+<table>
+<tr><th style="width:30%">Expression</th><th>Rule</th></tr>
+<tr><td><code>a + b</code>, <code>a - b</code>, <code>a &lt; b</code>, <code>a == b</code></td><td>Dimensions must be equal. If the scales differ, the right side is converted to the left side's unit (<code>1 km + 500 m</code> is <code>1.5 km</code>).</td></tr>
+<tr><td><code>a * b</code></td><td>Dimensions add, scales multiply (<code>3 m * 4 m</code> is <code>12 m^2</code>).</td></tr>
+<tr><td><code>a / b</code></td><td>Dimensions subtract, scales divide. If everything cancels, the result is a plain number (<code>2 km / 500 m</code> is <code>4</code>).</td></tr>
+<tr><td><code>a ^ n</code></td><td><code>n</code> is an integer literal; dimension and scale are raised to <code>n</code>.</td></tr>
+<tr><td><code>x in U</code></td><td>Explicit conversion; an error unless <code>x</code> and <code>U</code> have the same dimension.</td></tr>
+<tr><td><code>let</code>, assignment, argument, <code>return</code></td><td>Same dimension required; scale differences converted automatically. A plain number never becomes a quantity, except the literal <code>0</code>.</td></tr>
+<tr><td><code>sqrt(q)</code></td><td>Every exponent of <code>q</code>'s dimension must be even (<code>sqrt(9 m^2)</code> is <code>3 m</code>).</td></tr>
+</table></div>
+<p>The other rules are the usual ones for a C-like language: conditions must be <code>bool</code>; <code>int</code> widens to
+<code>float</code> but never narrows implicitly; names must be declared before use; blocks create scopes and may shadow outer
+names; a function with a result type must return on every path; and the program must contain <code>fn main()</code>.</p>
+
+<h1>7. The Seven-Phase Compiler Pipeline</h1>
+<p>This section follows one program through every phase. All outputs below are real compiler output for the program in
+<code>examples/phases_demo.lum</code>:</p>
+<pre>unit h = 3600 s;
+
+fn main() {
+    let d = 90 km;
+    let t = 1.5 h;
+    let v = d / t;
+    print(v);
+    print(v in m/s);
+}</pre>
+
+<h2>7.1 Phase 1: Lexical Analysis</h2>
+<p>The lexer reads the source one character at a time and groups characters into tokens. It is a hand-coded finite automaton:
+whitespace and comments are skipped, the longest valid token wins (so <code>&lt;=</code> is one token), identifiers are looked up
+in the keyword table, and every token remembers its line and column. Numbers keep an exact <code>Fraction</code> value. The lexer
+does <b>not</b> decide what is a unit: <code>m/s^2</code> is simply IDENT, SLASH, IDENT, CARET, INT. Lexical errors (illegal
+character, unterminated string or comment, malformed number, bad escape) are recorded and scanning continues, so one run reports
+all of them. The demo program produces 46 tokens; the first line becomes <code>UNIT IDENT(h) ASSIGN INT(3600) IDENT(s) SEMI</code>.</p>
+
+<h2>7.2 Phase 2: Syntax Analysis</h2>
+<p>The parser is recursive descent, with one method per grammar rule in Section 6.2 and the two unit rules built in. When it
+meets a token that cannot continue the current rule, it records an error that names the expected token, then skips ahead to the
+next <code>;</code> or <code>}</code> (panic-mode recovery) and continues, so one run lists several real syntax errors. The output
+is an abstract syntax tree with no punctuation in it: the shape of the tree already says how the expression is grouped.</p>
+
+<h2>7.3 Phase 3: Unit and Type Checking</h2>
+<p>The checker walks the tree bottom-up and computes the type of every node from the types of its children (Figure 2). Where
+scales differ, it inserts an explicit <code>Convert</code> node with an exact factor; where an int is used as a float, it inserts
+a <code>Cast</code>. It also keeps a stack of scopes for declared names, checks function calls for argument count and types,
+checks that functions with a result type return on every path, and produces warnings for unused variables and unreachable code.
+The <code>--ast</code> output for the demo program shows the result:</p>
+<pre>Let(name='v')
+  Binary(op='/')  : km/h
+    Var(name='d')  : km
+    Var(name='t')  : h
+Print(label='m/s')
+  Convert(from_scale=0.2777777777777778, to_scale=1)  : m/s
+    Var(name='v')  : km/h</pre>
+
+<figure>
+<div class="figtitle">Type of <span class="mono" style="font-size:12pt">d / t</span>, computed bottom-up</div>
+<svg viewBox="0 0 600 230" width="520">
+  <g font-size="13" text-anchor="middle">
+    <rect x="170" y="10" width="260" height="62" rx="5" fill="#000"/>
+    <text x="300" y="32" fill="#fff" font-weight="bold">Binary  /</text>
+    <text x="300" y="50" fill="#fff" font-size="12">dimension: length - time = m¹·s⁻¹ (speed)</text>
+    <text x="300" y="65" fill="#fff" font-size="12">scale: 1000 / 3600 = 5/18   -&gt;  km/h</text>
+    <line x1="240" y1="72" x2="160" y2="140" stroke="#000" stroke-width="1.5"/>
+    <line x1="360" y1="72" x2="440" y2="140" stroke="#000" stroke-width="1.5"/>
+    <rect x="40" y="140" width="240" height="62" rx="5" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="160" y="162" font-weight="bold">Var  d</text>
+    <text x="160" y="180" font-size="12">dimension: m¹ (length)</text>
+    <text x="160" y="195" font-size="12">scale: 1000   -&gt;  km</text>
+    <rect x="320" y="140" width="240" height="62" rx="5" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="440" y="162" font-weight="bold">Var  t</text>
+    <text x="440" y="180" font-size="12">dimension: s¹ (time)</text>
+    <text x="440" y="195" font-size="12">scale: 3600   -&gt;  h</text>
+    <text x="300" y="224" font-size="11" font-style="italic">children are typed first; the parent's type is computed from theirs (S-attributed)</text>
+  </g>
+</svg>
+<figcaption><b>Figure 2:</b> <i>Dimension algebra as a synthesized attribute</i></figcaption>
+</figure>
+
+<h2>7.4 Phase 4: Intermediate Code</h2>
+<p>The intermediate code generator lowers the checked tree to three-address code: one operation per line, at most two inputs and
+one output, with temporaries named <code>t1</code>, <code>t2</code> and so on. <code>if</code> and <code>while</code> become labels and conditional jumps,
+and <code>&amp;&amp;</code> and <code>||</code> become jumps so that the right side is only evaluated when needed. Units are gone
+at this point: a conversion is just a multiplication, marked <code>; convert</code>.</p>
+<pre>func main():
+    d = 90.0
+    t = 1.5
+    t1 = d / t
+    v = t1
+    print v "km/h"
+    t2 = v * 0.2777777777777778   ; convert
+    print t2 "m/s"
+    return</pre>
+
+<h2>7.5 Phase 5: Optimization</h2>
+<p>The optimizer runs several small passes and repeats them until nothing changes (a fixed point): constant folding, constant and
+copy propagation, <b>conversion fusion</b> (two conversions in a row become one multiplication by the product of their exact
+factors), algebraic simplification (<code>x + 0</code>, <code>x * 1</code>), branch folding for constant conditions, removal of
+unreachable instructions, jump clean-up, and dead-code elimination. Knowledge is discarded at every label, because a label is a
+point where control can arrive from elsewhere. For the demo program, eight instructions become three in two rounds:</p>
+<pre>func main():
+    print 60.0 "km/h"
+    print 16.666666666666668 "m/s"
+    return</pre>
+
+<h2>7.6 Phase 6: Code Generation</h2>
+<p>The code generator translates three-address code into bytecode for a stack machine. Each instruction becomes a few stack
+operations: <code>t3 = t1 * t2</code> becomes <code>LOAD t1, LOAD t2, MUL, STORE t3</code>. Every variable and temporary gets a
+numbered slot in its function's frame, and labels are turned into absolute addresses in a second pass. A unit conversion is
+<code>PUSH factor, MUL</code>, when the optimizer has not already folded it away.</p>
+<pre>== main  (0 params, 0 local slots)
+  0000  PUSH   60.0
+  0001  PRINT  "km/h"
+  0002  PUSH   16.666666666666668
+  0003  PRINT  "m/s"
+  0004  RET</pre>
+
+<h2>7.7 Phase 7: The Virtual Machine</h2>
+<p>The virtual machine is a fetch-decode-execute loop. Each function call pushes a frame holding its local slots, its operand
+stack and its instruction pointer; <code>RET</code> pops the frame and hands the result to the caller. The machine keeps its own
+list of frames instead of using Python's call stack, so very deep recursion is reported as a clean Lumen error (more than 5,000
+nested calls) and never crashes Python. A step limit of 10,000,000 instructions catches infinite loops. Runtime errors (division
+by zero, square root of a negative number, call stack too deep, step limit) carry the source line. The demo program prints
+<code>60.0 km/h</code> and <code>16.66666667 m/s</code>.</p>
+
+<h2>7.8 Diagnostics</h2>
+<p>Every phase describes a problem the same way: a message, a line, a column, an underline under the exact characters, and when
+possible a <code>help</code> line that suggests a fix. The checker includes "did you mean" suggestions for misspelled unit and
+variable names, based on edit distance. For example, a program that writes <code>5 mtr</code> is told:</p>
+<pre>examples/err_units.lum:13:15: error: unknown unit 'mtr'
+   13 |     let z = 5 mtr;                     // misspelled unit
+      |               ^~~
+      = help: did you mean 'm'?</pre>
+
+<h2>7.9 Worked Example Summary</h2>
+<div class="keep"><div class="caption"><b>Table 5:</b> <i>Output of each phase for <code>examples/phases_demo.lum</code></i></div>
+<table>
+<tr><th style="width:24%">Phase</th><th>Observed output</th></tr>
+<tr><td class="b">1. Lexical</td><td>46 tokens; numbers stored as exact fractions; no errors.</td></tr>
+<tr><td class="b">2. Syntax</td><td>One unit declaration and one function <code>main</code> with five statements.</td></tr>
+<tr><td class="b">3. Unit checking</td><td><code>d : km</code>, <code>t : h</code>, <code>v : km/h</code>; one Convert node inserted (km/h to m/s, factor 5/18).</td></tr>
+<tr><td class="b">4. Intermediate</td><td>8 three-address instructions (excluding the function header).</td></tr>
+<tr><td class="b">5. Optimization</td><td>3 instructions after 2 rounds: 2 constants folded, 6 operands propagated, 5 dead assignments removed.</td></tr>
+<tr><td class="b">6. Code generation</td><td>5 bytecode instructions, no local slots needed.</td></tr>
+<tr><td class="b">7. Execution</td><td>5 VM steps; output <code>60.0 km/h</code> and <code>16.66666667 m/s</code>.</td></tr>
+</table></div>
+
+<h1>8. Real Unit Failures Reproduced</h1>
+<p>The project includes the two failures from Section 1 written in Lumen, each as a bug and a fix. This is the clearest way to
+show what the checker does.</p>
+
+<h2>8.1 Mars Climate Orbiter (1999)</h2>
+<p>In the bug version, the value read from the ground software is a bare number, and the navigation function declares that its
+parameter is an impulse in newton seconds:</p>
+<pre>unit N = 1 kg*m/s^2;
+unit lbf = 4.4482216152605 N;
+
+fn update_trajectory(impulse: N*s) { print(impulse); }
+
+fn main() {
+    let from_ground_file = 12.5;          // bare number: which unit?
+    update_trajectory(from_ground_file);  // Lumen refuses to compile this
+}</pre>
+<pre>examples/mars_bug.lum:13:23: error: argument 1 of 'update_trajectory':
+    expected impulse (N*s), found a plain number (float)
+   13 |     update_trajectory(from_ground_file);
+      |                       ^~~~~~~~~~~~~~~~
+      = help: if the number really is in N*s, say so:
+              `from_ground_file * 1 N*s`; or write the literal with its unit
+              (e.g. `4 N*s`)</pre>
+<p class="small" style="font-style:italic;margin-top:-4pt">In this section, long message lines are wrapped and trailing source comments are trimmed to fit the page.</p>
+<p>In the fixed version the data says what it is: <code>let from_ground_file = 12.5 lbf*s;</code>. The compiler inserts the
+factor 4.4482216152605 itself, and the program prints <code>55.60277019 N*s</code>.</p>
+
+<h2>8.2 Gimli Glider (1983)</h2>
+<p>The fuel calculation needs a density in kilograms per litre. The bug version passes the bare number 1.77, which was really a
+density in pounds per litre, and is rejected in the same way:</p>
+<pre>examples/gimli_bug.lum:13:42: error: argument 2 of 'fuel_mass':
+    expected density (kg/L), found a plain number (float)
+   13 |     let kilograms = fuel_mass(dripstick, 1.77);
+      |                                          ^~~~
+      = help: if the number really is in kg/L, say so: `1.77 * 1 kg/L`;
+              or write the literal with its unit (e.g. `4 kg/L`)</pre>
+
+<h2>8.3 Other Error Classes</h2>
+<p>The example <code>err_units.lum</code> makes six different unit mistakes in one program, and one run reports all six: a length
+where a speed is required, metres plus seconds, a bare number for a time, an impossible conversion of length to seconds, a
+misspelled unit, and a comparison of a length with a time. Other examples cover dosing (<code>dosing_bug.lum</code>, a time passed
+as a body weight), currencies (<code>currency_bug.lum</code>, rupees added to dollars without a rate), and every lexical, syntax,
+scope, return, recursion and runtime error class.</p>
+
+<h1>9. Correctness and Safety</h1>
+<p>A compiler that rejects correct programs or changes their meaning is worse than none. Table 6 lists the safeguards built into
+the design.</p>
+<div class="keep"><div class="caption"><b>Table 6:</b> <i>Correctness safeguards</i></div>
+<table>
+<tr><th style="width:30%">Safeguard</th><th>Effect</th></tr>
+<tr><td>Exact rational scales</td><td>Conversion factors are fractions until the final step; chained conversions are fused into one exact factor, rounded once.</td></tr>
+<tr><td>Shared arithmetic</td><td>The optimizer evaluates constants with the same function the VM uses, so folding cannot change a result.</td></tr>
+<tr><td>Trapping operations kept</td><td>Division or modulo that might fail is never folded or removed as dead code, so a division by zero still happens at run time.</td></tr>
+<tr><td>Join points reset</td><td>Constant knowledge is discarded at every label, so a loop variable is never treated as a constant.</td></tr>
+<tr><td>No error cascades</td><td>An erroneous expression gets the <code>error</code> type and silences everything built from it.</td></tr>
+<tr><td>Bounded execution</td><td>Own frame list (5,000 nested calls) and a 10,000,000-step limit; deep nesting in the source is a clean compile error.</td></tr>
+<tr><td>No tracebacks</td><td>Every user mistake becomes a located diagnostic with an exit code; Python exceptions never reach the user.</td></tr>
+</table></div>
+
+<h1>10. Testing and Quality Assurance</h1>
+<p>The project has 187 automated tests in six files, run with <code>pytest</code>. In addition, each of the 34 example programs
+has a recorded expected output in <code>tests/golden/</code>, and a test compares the compiler's current output with it.</p>
+<div class="keep"><div class="caption"><b>Table 7:</b> <i>Test files and what they validate</i></div>
+<table>
+<tr><th style="width:25%">File</th><th style="width:9%" class="c">Tests</th><th>What is validated</th></tr>
+<tr><td>test_lexer.py</td><td class="c">12</td><td>Token types, longest match, exact numbers, positions, every lexical error.</td></tr>
+<tr><td>test_parser.py</td><td class="c">20</td><td>Precedence and associativity, the two unit rules, syntax errors and recovery.</td></tr>
+<tr><td>test_units.py</td><td class="c">7</td><td>Dimension algebra, SI prefixes, new base dimensions, dimension names and "did you mean" edit distance.</td></tr>
+<tr><td>test_semantic.py</td><td class="c">63</td><td>Every typing rule, conversion insertion, scopes, return paths, warnings and every error message.</td></tr>
+<tr><td>test_backend.py</td><td class="c">48</td><td>IR, optimizer safety, bytecode, VM, runtime errors, and optimized versus unoptimized output.</td></tr>
+<tr><td>test_examples.py</td><td class="c">37</td><td>All 34 examples against their golden outputs, the example count, exit codes and the phase flags.</td></tr>
+</table></div>
+
+<figure>
+<div class="figtitle">Automated tests per file (total = 187)</div>
+<svg viewBox="0 0 600 250" width="500">
+  <defs>
+    <pattern id="h1" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#000" stroke-width="1.6"/></pattern>
+    <pattern id="h2" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#000" stroke-width="1.6"/></pattern>
+    <pattern id="h3" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.2" fill="#000"/></pattern>
+    <pattern id="h4" width="8" height="8" patternUnits="userSpaceOnUse"><line x1="0" y1="4" x2="8" y2="4" stroke="#000" stroke-width="1.4"/></pattern>
+    <pattern id="h5" width="8" height="8" patternUnits="userSpaceOnUse"><line x1="4" y1="0" x2="4" y2="8" stroke="#000" stroke-width="1.4"/></pattern>
+    <pattern id="h6" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0,0 L8,8 M8,0 L0,8" stroke="#000" stroke-width="1.2"/></pattern>
+  </defs>
+  <g font-size="13">
+    <line x1="150" y1="10" x2="150" y2="210" stroke="#000"/>
+    <line x1="150" y1="210" x2="580" y2="210" stroke="#000"/>
+    <g text-anchor="end">
+      <text x="142" y="35">semantic</text><text x="142" y="67">backend</text><text x="142" y="99">examples</text>
+      <text x="142" y="131">parser</text><text x="142" y="163">lexer</text><text x="142" y="195">units</text>
+    </g>
+    <rect x="150" y="20" width="390.9" height="22" fill="url(#h1)" stroke="#000"/><text x="547" y="36">63</text>
+    <rect x="150" y="52" width="297.8" height="22" fill="url(#h2)" stroke="#000"/><text x="454" y="68">48</text>
+    <rect x="150" y="84" width="229.6" height="22" fill="url(#h6)" stroke="#000"/><text x="386" y="100">37</text>
+    <rect x="150" y="116" width="124.1" height="22" fill="url(#h3)" stroke="#000"/><text x="280" y="132">20</text>
+    <rect x="150" y="148" width="74.5" height="22" fill="url(#h4)" stroke="#000"/><text x="231" y="164">12</text>
+    <rect x="150" y="180" width="43.4" height="22" fill="url(#h5)" stroke="#000"/><text x="200" y="196">7</text>
+    <g text-anchor="middle" font-size="11">
+      <text x="150" y="226">0</text><text x="274" y="226">20</text><text x="398" y="226">40</text><text x="522" y="226">60</text>
+    </g>
+    <text x="365" y="244" text-anchor="middle" font-size="12">Number of tests</text>
+  </g>
+</svg>
+<figcaption><b>Figure 3:</b> <i>Distribution of the 187 tests across the test files</i></figcaption>
+</figure>
+
+<h2>10.1 Results Reproduced in This Study</h2>
+<p>The full suite was run for this study with Python 3.12.4 and reported <b>187 passed</b>, with no failures and no skipped
+tests. Two tests deserve particular mention. A <b>differential test</b> runs 21 example programs with and without the optimizer
+and requires identical output, which is the main evidence that the optimizer is safe. An <b>opcode test</b> compiles a program
+that converts m/s to km/h and checks that its bytecode uses only ordinary stack instructions (PUSH, LOAD, STORE, arithmetic,
+comparisons, jumps, CALL, RET, PRINT), which is the evidence that units do not reach run time.</p>
+
+<h2>10.2 What the Tests Do and Do Not Show</h2>
+<p>The tests check specific behaviour with exact expected outputs, including the exact wording and position of error messages, so
+a regression in any phase is caught. They do not include randomly generated programs (property-based testing or fuzzing), so
+unusual combinations of features are only as well covered as the hand-written cases. The opcode test checks one program, not
+every example. These gaps are listed in Table 10.</p>
+
+<h1>11. Evaluation</h1>
+<h2>11.1 Compile Latency</h2>
+<p>Each phase was timed on two inputs, using an Apple M3 Pro with Python 3.12.4. The small input is the 10-line demo program from
+Section 7 (mean of 500 runs). The large input is generated: a unit declaration, 200 functions that each add, divide, compare and
+convert quantities, and a <code>main</code> that calls all of them, giving 1,603 lines and 14,613 tokens (mean of 50 runs). Both
+had 20 warm-up runs.</p>
+<div class="keep"><div class="caption"><b>Table 8:</b> <i>Measured time per phase (milliseconds)</i></div>
+<table>
+<tr><th>Input</th><th class="c">Lex</th><th class="c">Parse</th><th class="c">Check</th><th class="c">IR</th><th class="c">Optimize</th><th class="c">Codegen</th><th class="c">Compile total</th><th class="c">Run (VM)</th></tr>
+<tr><td>10 lines, 46 tokens</td><td class="c">0.050</td><td class="c">0.034</td><td class="c">0.041</td><td class="c">0.009</td><td class="c">0.021</td><td class="c">0.003</td><td class="c"><b>0.157</b></td><td class="c">0.004</td></tr>
+<tr><td>1,603 lines, 14,613 tokens</td><td class="c">14.50</td><td class="c">10.19</td><td class="c">12.49</td><td class="c">3.70</td><td class="c">5.79</td><td class="c">2.04</td><td class="c"><b>48.71</b></td><td class="c">1.31</td></tr>
+</table></div>
+
+<figure>
+<div class="figtitle">Time per phase for the 1,603-line program</div>
+<svg viewBox="0 0 600 270" width="500">
+  <defs>
+    <pattern id="g1" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#000" stroke-width="1.6"/></pattern>
+    <pattern id="g2" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0,0 L8,8 M8,0 L0,8" stroke="#000" stroke-width="1.2"/></pattern>
+  </defs>
+  <g font-size="13">
+    <line x1="150" y1="10" x2="150" y2="235" stroke="#000"/>
+    <line x1="150" y1="235" x2="580" y2="235" stroke="#000"/>
+    <g text-anchor="end">
+      <text x="142" y="31">Lexer</text><text x="142" y="62">Parser</text><text x="142" y="93">Unit checker</text>
+      <text x="142" y="124">IR generator</text><text x="142" y="155">Optimizer</text><text x="142" y="186">Code generator</text>
+      <text x="142" y="217">VM (run)</text>
+    </g>
+    <rect x="150" y="16" width="407.8" height="21" fill="url(#g1)" stroke="#000"/><text x="562" y="31" font-size="12">14.50</text>
+    <rect x="150" y="47" width="286.6" height="21" fill="url(#g1)" stroke="#000"/><text x="441" y="62" font-size="12">10.19</text>
+    <rect x="150" y="78" width="351.3" height="21" fill="url(#g2)" stroke="#000"/><text x="506" y="93" font-size="12">12.49</text>
+    <rect x="150" y="109" width="104.1" height="21" fill="url(#g1)" stroke="#000"/><text x="259" y="124" font-size="12">3.70</text>
+    <rect x="150" y="140" width="162.8" height="21" fill="url(#g1)" stroke="#000"/><text x="318" y="155" font-size="12">5.79</text>
+    <rect x="150" y="171" width="57.4" height="21" fill="url(#g1)" stroke="#000"/><text x="212" y="186" font-size="12">2.04</text>
+    <rect x="150" y="202" width="36.8" height="21" fill="#fff" stroke="#000"/><text x="192" y="217" font-size="12">1.31</text>
+    <g text-anchor="middle" font-size="11">
+      <text x="150" y="250">0</text><text x="290.6" y="250">5</text><text x="431.3" y="250">10</text><text x="571.9" y="250">15</text>
+    </g>
+    <text x="365" y="266" text-anchor="middle" font-size="12">Mean time (ms)</text>
+  </g>
+</svg>
+<figcaption><b>Figure 4:</b> <i>Mean compile time per phase, large input (cross-hatched: the unit checker)</i></figcaption>
+</figure>
+<p>A program of about 1,600 lines compiles in under 50 milliseconds, roughly 3.3 microseconds per token. The unit checker, which
+does the most work per node, costs about the same as the lexer, so checking units adds no noticeable delay.</p>
+
+<h2>11.2 Zero Run-Time Cost</h2>
+<p>The claim that units cost nothing at run time can be shown directly. The program <code>examples/zero_cost.lum</code> declares a
+speed in km/h and initialises it with 10 m/s:</p>
+<pre>let v: km/h = 10 m/s;           // source
+t1 = 10.0 * 3.6   ; convert      // IR: the conversion is one multiplication
+print 36.0 "km/h"               // optimized: the conversion is gone</pre>
+<p>The conversion is checked at compile time, becomes a single multiplication, and is folded into the constant 36.0. Nothing
+about units is left for the virtual machine to do.</p>
+
+<h2>11.3 Effect of the Optimizer</h2>
+<p>Figure 5 shows the number of three-address instructions before and after optimization for seven example programs. Programs
+dominated by constants and unit conversions shrink a lot (20 to 6 for <code>optimizer_demo</code>). Programs whose values
+depend on input to a function or on a loop, such as <code>fact</code> and <code>primes</code>, do not shrink at all, because the
+optimizer is deliberately conservative: it only folds what it can prove.</p>
+
+<figure>
+<div class="figtitle">Instructions before and after optimization</div>
+<svg viewBox="0 0 600 300" width="520">
+  <defs>
+    <pattern id="b1" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#000" stroke-width="1.6"/></pattern>
+  </defs>
+  <g font-size="12">
+    <line x1="60" y1="30" x2="60" y2="240" stroke="#000"/>
+    <line x1="60" y1="240" x2="590" y2="240" stroke="#000"/>
+    <g text-anchor="end" font-size="11">
+      <text x="54" y="244">0</text><text x="54" y="172.6">10</text><text x="54" y="101.3">20</text><text x="54" y="29.9">30</text>
+    </g>
+    <text x="18" y="135" transform="rotate(-90 18 135)" text-anchor="middle">Instructions</text>
+    <!-- zero_cost 4/2 -->
+    <rect x="70" y="211.4" width="26" height="28.6" fill="url(#b1)" stroke="#000"/><rect x="98" y="225.7" width="26" height="14.3" fill="#fff" stroke="#000"/>
+    <!-- phases_demo 8/3 -->
+    <rect x="144" y="182.9" width="26" height="57.1" fill="url(#b1)" stroke="#000"/><rect x="172" y="218.6" width="26" height="21.4" fill="#fff" stroke="#000"/>
+    <!-- travel_time 11/4 -->
+    <rect x="218" y="161.4" width="26" height="78.6" fill="url(#b1)" stroke="#000"/><rect x="246" y="211.4" width="26" height="28.6" fill="#fff" stroke="#000"/>
+    <!-- mars_fixed 6/4 -->
+    <rect x="292" y="197.1" width="26" height="42.9" fill="url(#b1)" stroke="#000"/><rect x="320" y="211.4" width="26" height="28.6" fill="#fff" stroke="#000"/>
+    <!-- optimizer_demo 20/6 -->
+    <rect x="366" y="97.1" width="26" height="142.9" fill="url(#b1)" stroke="#000"/><rect x="394" y="197.1" width="26" height="42.9" fill="#fff" stroke="#000"/>
+    <!-- fact 16/16 -->
+    <rect x="440" y="125.7" width="26" height="114.3" fill="url(#b1)" stroke="#000"/><rect x="468" y="125.7" width="26" height="114.3" fill="#fff" stroke="#000"/>
+    <!-- primes 28/28 -->
+    <rect x="514" y="40" width="26" height="200" fill="url(#b1)" stroke="#000"/><rect x="542" y="40" width="26" height="200" fill="#fff" stroke="#000"/>
+    <g text-anchor="middle" font-size="10.5">
+      <text x="83" y="207">4</text><text x="111" y="221">2</text>
+      <text x="157" y="178">8</text><text x="185" y="214">3</text>
+      <text x="231" y="157">11</text><text x="259" y="207">4</text>
+      <text x="305" y="193">6</text><text x="333" y="207">4</text>
+      <text x="379" y="93">20</text><text x="407" y="193">6</text>
+      <text x="453" y="121">16</text><text x="481" y="121">16</text>
+      <text x="527" y="36">28</text><text x="555" y="36">28</text>
+    </g>
+    <g text-anchor="middle" font-size="11">
+      <text x="97" y="256">zero_cost</text><text x="171" y="256">phases_demo</text><text x="245" y="256">travel_time</text>
+      <text x="319" y="256">mars_fixed</text><text x="393" y="256">optimizer_demo</text><text x="467" y="256">fact</text><text x="541" y="256">primes</text>
+    </g>
+    <rect x="200" y="272" width="14" height="12" fill="url(#b1)" stroke="#000"/><text x="220" y="282">before optimization</text>
+    <rect x="350" y="272" width="14" height="12" fill="#fff" stroke="#000"/><text x="370" y="282">after optimization</text>
+  </g>
+</svg>
+<figcaption><b>Figure 5:</b> <i>Three-address instruction counts with and without the optimizer</i></figcaption>
+</figure>
+
+<h2>11.4 Cautions</h2>
+<p>These measurements come from one machine and one Python version and should be read as an order of magnitude, not a benchmark.
+The large input was generated and is repetitive, so it exercises the compiler evenly but is not typical of hand-written code.
+The virtual machine is written in Python and is far slower than native code; its speed was not a goal of the project and was not
+compared with other languages.</p>
+
+<h1>12. Contributions and Novelty</h1>
+<p>None of the ingredients is new: dimensional analysis, syntax-directed type checking, three-address code, constant folding and
+stack machines are all established techniques [1], [2]. The contribution of Lumen is putting them together in one small language
+that is designed around units from the start, with a complete compiler that a student can run, read and explain. Table 9
+summarises it.</p>
+<div class="keep"><div class="caption"><b>Table 9:</b> <i>Contributions of Lumen</i></div>
+<table>
+<tr><th style="width:30%">Contribution</th><th>Description</th></tr>
+<tr><td class="b">Units in the type of every number</td><td>Quantities, unit types for variables and functions, declared units and declared base dimensions such as currencies.</td></tr>
+<tr><td class="b">Compile-time dimension algebra</td><td>An S-attributed checker that adds, subtracts and compares dimension vectors, with exact automatic conversion.</td></tr>
+<tr><td class="b">Context rules for unit syntax</td><td>A name after a number is a unit; a unit continues over <code>*</code> and <code>/</code> only through known units.</td></tr>
+<tr><td class="b">Zero run-time cost, demonstrated</td><td>Units erased after checking; conversions fused and folded; a test checks the bytecode's opcode set.</td></tr>
+<tr><td class="b">Errors a student can act on</td><td>Located diagnostics with an underline, dimension names, "did you mean" suggestions and a concrete fix.</td></tr>
+<tr><td class="b">Real failures reproduced</td><td>The Mars Climate Orbiter and Gimli Glider bugs, plus dosing and currency mistakes, rejected at compile time.</td></tr>
+<tr><td class="b">Visible phases and tests</td><td>A flag for every phase, a local web playground, 187 tests and golden outputs for 34 examples.</td></tr>
+</table></div>
+<p><b>Novelty qualification.</b> Lumen is a course project. It does not claim to replace F# or production unit libraries, and it
+makes no claim of research-level novelty.</p>
+
+<h1>13. Limitations</h1>
+<p>The limitations below were found by reading the code and by running the examples. Some are deliberate scope decisions and
+some are gaps.</p>
+<div class="caption"><b>Table 10:</b> <i>Limitations, impact and suggested direction</i></div>
+<table>
+<tr><th style="width:32%">Limitation</th><th style="width:34%">Impact</th><th>Suggested direction</th></tr>
+<tr><td>Checking covers one program. The Mars failure crossed two programs through a data file.</td><td>Lumen rejects a bare number entering a typed function, but cannot detect a human writing the wrong unit (<code>12.5 N*s</code> when the file held lbf·s).</td><td>Typed file formats or interface declarations that carry units between programs.</td></tr>
+<tr><td>No offset units (°C, °F).</td><td>Temperatures need a point-versus-difference distinction that scale factors cannot express.</td><td>Affine types: a temperature point and a temperature difference as separate kinds.</td></tr>
+<tr><td>Dimensions, not quantity kinds.</td><td>Torque and energy are both kg·m²/s² and cannot be told apart; <code>mcg/kg</code> cancels to a plain number.</td><td>Named quantity kinds on top of dimensions, as proposed by McKeever [3].</td></tr>
+<tr><td>Integer exponents only; <code>^</code> needs a literal.</td><td>Units such as Hz<sup>1/2</sup> cannot be written.</td><td>Rational exponents in the dimension vector.</td></tr>
+<tr><td>No unit-polymorphic functions.</td><td><code>fn square(x)</code> must be written once per unit.</td><td>Unit variables and inference across calls, as in F# [13].</td></tr>
+<tr><td>Floating-point last-bit differences.</td><td>A fused conversion uses one exact factor instead of two rounded ones, so a result can differ in the last bit from a hand calculation.</td><td>Document it; optionally keep exact fractions to run time for printed results.</td></tr>
+<tr><td>Python virtual machine.</td><td>Programs run far slower than native code.</td><td>An LLVM IR or x86-64 back end from the existing three-address code.</td></tr>
+<tr><td>Documents say slightly more than one test shows.</td><td>The team notes say the opcode check runs "on every example"; the test checks one program.</td><td>Parametrize the opcode test over all 34 examples.</td></tr>
+<tr><td>No property-based or fuzz tests.</td><td>Rare combinations of features are only covered by hand-written cases.</td><td>Generate random well-typed programs and compare optimized and unoptimized output.</td></tr>
+</table>
+
+<h1>14. Future Work and Scope for Improvement</h1>
+<h2>14.1 Language</h2>
+<ul>
+<li><b>Temperature and other offset units</b> through separate kinds for points and differences.</li>
+<li><b>Quantity kinds</b> so that torque and energy, or concentration and plain ratios, are kept apart.</li>
+<li><b>Unit-polymorphic functions</b> with unit variables, such as <code>fn square&lt;U&gt;(x: U) -&gt; U^2</code>.</li>
+<li><b>Arrays and records</b> whose elements carry units.</li>
+</ul>
+<h2>14.2 Compiler</h2>
+<ul>
+<li><b>A native back end</b> emitting LLVM IR or x86-64 assembly from the existing three-address code.</li>
+<li><b>Global optimizations</b> across basic blocks using data-flow analysis, and loop-invariant code motion.</li>
+<li><b>SSA form</b> for the intermediate representation, which would simplify propagation and dead-code elimination.</li>
+</ul>
+<h2>14.3 Learner Experience</h2>
+<ul>
+<li><b>A step-through view</b> in the playground that highlights the tokens, tree nodes and instructions for a selected line.</li>
+<li><b>Editor integration</b> that underlines unit errors while typing.</li>
+</ul>
+<h2>14.4 Verification</h2>
+<ul>
+<li><b>Property-based and fuzz testing</b> of the lexer, parser and checker.</li>
+<li><b>Differential testing on every example</b>, and the opcode test parametrized over all programs.</li>
+</ul>
+<div class="keep"><div class="caption"><b>Table 11:</b> <i>Suggested roadmap</i></div>
+<table>
+<tr><th style="width:16%">Horizon</th><th>Improvement</th><th style="width:32%">Expected benefit</th></tr>
+<tr><td class="b">Short term</td><td>Parametrize the opcode and differential tests over all examples; fix the documentation claim.</td><td>Closes the gap between the documents and the tests at low cost.</td></tr>
+<tr><td class="b">Medium term</td><td>Quantity kinds; offset units; property-based tests; step-through view in the playground.</td><td>Covers the most common real unit mistakes still missed.</td></tr>
+<tr><td class="b">Long term</td><td>LLVM back end; unit-polymorphic functions; typed interfaces between programs.</td><td>Moves Lumen from a teaching compiler towards practical use.</td></tr>
+</table></div>
+
+<h1>15. Conclusion</h1>
+<p>Lumen addresses a problem that every engineer meets sooner or later: the computer cannot tell metres from seconds, and unit
+mistakes have destroyed a spacecraft and stopped the engines of an airliner. By making the unit part of the type of every number,
+Lumen turns those mistakes into compile-time errors with a precise location and a suggested fix. By converting with exact fractions
+and erasing units after checking, it gives that safety without any cost while the program runs.</p>
+<p>The compiler implements every classical phase by hand, and each phase has a real job: the parser solves the problem of telling a
+unit from a variable, the checker is a textbook S-attributed definition over dimension vectors, and the optimizer is what makes the
+zero-cost claim measurable. The work is verified by 187 passing tests and golden outputs for 34 programs, and a 1,600-line program
+compiles in under 50 milliseconds. The limits are stated plainly: one program at a time, no temperatures, dimensions rather than
+quantity kinds, and a Python virtual machine. Each of these has a clear next step, set out in Section 14.</p>
+
+<h1 class="page">References</h1>
+<div class="small" style="font-size:11pt; line-height:1.4">
+<p style="text-align:left">[1] A. V. Aho, M. S. Lam, R. Sethi and J. D. Ullman, <i>Compilers: Principles, Techniques, and Tools</i>, 2nd ed. Boston, MA, USA: Pearson/Addison-Wesley, 2006.</p>
+<p style="text-align:left">[2] A. Kennedy, "Types for Units-of-Measure: Theory and Practice," in <i>Central European Functional Programming School (CEFP 2009)</i>, LNCS 6299, Springer, 2010.</p>
+<p style="text-align:left">[3] S. McKeever, "A Discipline of Programming with Quantities," arXiv:2210.12359, 2022. [Online]. Available: https://arxiv.org/abs/2210.12359</p>
+<p style="text-align:left">[4] L. Jiang and Z. Su, "Osprey: A Practical Type System for Validating Dimensional Unit Correctness of C Programs," in <i>Proc. 28th Int. Conf. on Software Engineering (ICSE)</i>, 2006.</p>
+<p style="text-align:left">[5] D. Orchard, A. Rice and O. Oshmyan, "Evolving Fortran types with inferred units-of-measure," <i>Journal of Computational Science</i>, 2015. [Online]. Available: https://www.cl.cam.ac.uk/~acr31/pubs/orchard-fortranunits.pdf</p>
+<p style="text-align:left">[6] M. Pusz et al., "Quantities and units library," ISO/IEC JTC1/SC22/WG21 paper P3045R9, 2026. [Online]. Available: https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2026/p3045r9</p>
+<p style="text-align:left">[7] Mars Climate Orbiter Mishap Investigation Board, "Phase I Report," NASA, November 1999.</p>
+<p style="text-align:left">[8] "Gimli Glider," Wikipedia. [Online]. Available: https://en.wikipedia.org/wiki/Gimli_Glider</p>
+<p style="text-align:left">[9] Medication error study, <i>Saudi Medical Journal</i>, vol. 27, no. 10, p. 1489. [Online]. Available: https://smj.org.sa/content/smj/27/10/1489.full-text.pdf</p>
+<p style="text-align:left">[10] A. Eliasen, "Frink programming language." [Online]. Available: https://frinklang.org</p>
+<p style="text-align:left">[11] "uom: Units of measurement for Rust." [Online]. Available: https://github.com/iliekturtles/uom</p>
+<p style="text-align:left">[12] "Pint: operate and manipulate physical quantities in Python." [Online]. Available: https://github.com/hgrecco/pint</p>
+<p style="text-align:left">[13] Microsoft, "Units of Measure," F# language reference. [Online]. Available: https://learn.microsoft.com/en-us/dotnet/fsharp/language-reference/units-of-measure</p>
+<p style="text-align:left">[14] Python Software Foundation, "fractions: Rational numbers," Python 3 documentation. [Online]. Available: https://docs.python.org/3/library/fractions.html</p>
+<p style="text-align:left">[15] S. Suresh, S. Kumar, N. Ninan, A. Sivakumar and A. Kumar, "Lumen compiler," GitHub repository. [Online]. Available: https://github.com/PuzzleHeaded-Look852/compiler-design-project</p>
+</div>
+
+<h1 class="page">Appendix A: Sample Session</h1>
+<p>The commands below show a typical demonstration, from the project root. Every output shown in this report can be reproduced
+the same way.</p>
+<pre>$ export PYTHONPATH=src
+$ python -m lumen run examples/travel_time.lum
+$ python -m lumen run examples/phases_demo.lum --tokens
+$ python -m lumen run examples/phases_demo.lum --ast
+$ python -m lumen run examples/optimizer_demo.lum --ir
+$ python -m lumen run examples/optimizer_demo.lum --ir-opt
+$ python -m lumen run examples/fib.lum --bytecode
+$ python -m lumen run examples/mars_bug.lum     # compile error, exit 1
+$ python -m lumen run examples/mars_fixed.lum   # 55.60277019 N*s</pre>
+
+<h1>Appendix B: Repository Structure</h1>
+<div class="keep"><div class="caption"><b>Table 12:</b> <i>Top-level layout of the project</i></div>
+<table>
+<tr><th style="width:28%">Path</th><th>Contents</th></tr>
+<tr><td>src/lumen/</td><td>The compiler: 16 modules, 3,437 lines, no third-party dependencies (Table 2).</td></tr>
+<tr><td>examples/</td><td>34 Lumen programs: working programs, bug-and-fix pairs (Mars, Gimli, dosing, currency), and one program per error class.</td></tr>
+<tr><td>tests/</td><td>Six pytest files with 187 tests, and <code>golden/</code> with the expected output of every example.</td></tr>
+<tr><td>playground/</td><td>A small local web server and page that run the compiler and show each phase in a tab.</td></tr>
+<tr><td>tools/</td><td>Script that regenerates <code>docs/PHASES.md</code> from real compiler output.</td></tr>
+<tr><td>docs/</td><td>Language reference and grammar, real output of every phase, viva preparation, team split.</td></tr>
+<tr><td>README.md, CLAUDE.md</td><td>Project overview, run instructions, invariants and honest limits.</td></tr>
+</table></div>
+
+<h1>Appendix C: Running and Testing the Project</h1>
+<pre>export PYTHONPATH=src                     # or: pip install -e .
+python -m lumen run   examples/travel_time.lum
+python -m lumen check examples/fact.lum   # compile only: errors, warnings
+python -m pytest -q                       # 187 passed
+python tests/make_golden.py               # regenerate golden outputs
+python playground/server.py               # web page at localhost:8765</pre>
+<p>Python 3.10 or newer is the only requirement; pytest is needed only for the tests.</p>
+
+<h1>Appendix D: Team Responsibilities</h1>
+<div class="keep"><div class="caption"><b>Table 13:</b> <i>Division of work by compiler phase</i></div>
+<table>
+<tr><th style="width:34%">Member</th><th style="width:30%">Part</th><th>Files</th></tr>
+<tr><td>Sanjay Suresh (24BCE2685)</td><td>Lexer, diagnostics, CLI, driver</td><td>lexer.py, tokens.py, errors.py, cli.py, compiler.py</td></tr>
+<tr><td>Advaith Sivakumar (24BCE2715)</td><td>Parser and syntax tree</td><td>parser.py, ast_nodes.py</td></tr>
+<tr><td>Sugesh Kumar (24BCE2687)</td><td>Unit system and type checker</td><td>units.py, semantic.py</td></tr>
+<tr><td>Noel Ninan (24BCE2737)</td><td>Intermediate code and optimizer</td><td>ir.py, irgen.py, optimizer.py</td></tr>
+<tr><td>Ajay Kumar (24BCE2721)</td><td>Bytecode, virtual machine, tests, playground</td><td>codegen.py, vm.py, tests/, playground/</td></tr>
+</table></div>
+<p>Every member has read every phase and can answer questions on all of them.</p>
+
+</body></html>

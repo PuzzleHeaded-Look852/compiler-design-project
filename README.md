@@ -15,6 +15,8 @@ message, and then **erases the units**, so the running program is plain arithmet
 > ran out of fuel in 1983 because 1.77 lb/L was used as kg/L. Both bugs are
 > compile-time errors in Lumen (`examples/mars_bug.lum`, `examples/gimli_bug.lum`).
 
+📄 **Case study report (PDF):** [docs/report/Lumen_Case_Study.pdf](docs/report/Lumen_Case_Study.pdf)
+
 ## Run it
 
 Python 3.10+ is the only requirement (pytest for the tests).
@@ -161,6 +163,7 @@ src/lumen/    the compiler (3.4k lines, no third-party dependencies)
 examples/     34 Lumen programs: working, bug-and-fix pairs, and one per error class
 tests/        187 pytest tests + golden outputs for every example (tests/golden)
 docs/         LANGUAGE.md (reference + grammar), VIVA_QA.md, PHASES.md (what each phase does, with real output)
+docs/report/  case study report: Lumen_Case_Study.pdf + its HTML sources (rebuild: python docs/report/build.py)
 CLAUDE.md     guide for working on the repo with Claude Code
 ```
 
